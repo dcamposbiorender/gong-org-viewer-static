@@ -1039,7 +1039,7 @@
         <button id="treeViewBtn" class="active">Tree</button>
         <button id="tableViewBtn">Table</button>
       </div>
-      <button class="reset-btn" id="resetAllBtn">Reset Overrides</button>
+      <button class="reset-btn" id="resetAllBtn">Reset overrides on this page - danger</button>
     </div>
   </div>
 </header>
@@ -1129,7 +1129,7 @@
           <th class="sortable" data-sort="type">Type</th>
           <th>Quote</th>
           <th class="sortable" data-sort="date">Date</th>
-          <th>AE / BD</th>
+          <th>BR Rep</th>
           <th class="sortable" data-sort="confidence">Confidence</th>
           <th>Link</th>
         </tr>
@@ -41735,7 +41735,7 @@ function renderTable(rangeStart, rangeEnd) {
       <td class="table-meta">${s.type.replace('_', ' ')}</td>
       <td class="table-quote">"${s.quote}"</td>
       <td class="table-meta">${s.date}</td>
-      <td class="table-meta">${[s.ae, s.bd].filter(Boolean).join(' / ') || '—'}</td>
+      <td class="table-meta">${s.internalName || '—'}</td>
       <td><span class="table-confidence ${s.isConflict ? 'low' : s.confidence}">${s.isConflict ? 'conflict' : s.confidence}</span></td>
       <td><a href="${s.gongUrl}" class="table-link" target="_blank">↗</a></td>
     </tr>
@@ -41924,8 +41924,25 @@ document.getElementById('tableViewBtn').addEventListener('click', () => setView(
 document.getElementById('evidenceHeader').addEventListener('click', toggleEvidence);
 
 document.getElementById('resetAllBtn').addEventListener('click', () => {
-  if (confirm('Reset all user overrides?')) {
-    overrides = {};
+  // Count how many overrides belong to current company
+  const currentCompanyOverrideCount = Object.keys(overrides).filter(entityId =>
+    findNodeById(DATA[currentCompany].root, entityId)
+  ).length;
+
+  if (currentCompanyOverrideCount === 0) {
+    alert('No overrides to reset for this company.');
+    return;
+  }
+
+  if (confirm(`Reset ${currentCompanyOverrideCount} override(s) for ${currentCompany}? This cannot be undone.`)) {
+    // Filter out only the current company's overrides, keep others
+    const filteredOverrides = {};
+    for (const [entityId, override] of Object.entries(overrides)) {
+      if (!findNodeById(DATA[currentCompany].root, entityId)) {
+        filteredOverrides[entityId] = override;
+      }
+    }
+    overrides = filteredOverrides;
     saveOverrides();
     renderCompany(currentCompany);
   }
@@ -41964,7 +41981,10 @@ function showVerificationConflicts() {
   const content = document.getElementById('changesModalContent');
 
   if (conflicts.length === 0) {
-    content.innerHTML = '<div class="changes-modal-empty">No verification conflicts</div>';
+    content.innerHTML = '<div class="changes-modal-empty">No verification conflicts</div>' +
+      '<div style="text-align: center; padding: 16px; border-top: 1px solid #eee; margin-top: 16px;">' +
+      '<button onclick="closeChangesModal()" style="background: #4285f4; color: white; border: none; padding: 10px 24px; border-radius: 4px; cursor: pointer; font-size: 14px;">Done</button>' +
+      '</div>';
   } else {
     content.innerHTML = conflicts.map(c => `
       <div class="change-item" style="cursor: pointer;" onclick="scrollToEntity('${c.entityId}')">
@@ -41977,7 +41997,10 @@ function showVerificationConflicts() {
           <div><strong>${c.source_name || 'Public'}:</strong> <a href="${c.source_url}" target="_blank">${c.public_title || '(no title)'}</a></div>
         </div>
       </div>
-    `).join('');
+    `).join('') +
+    '<div style="text-align: center; padding: 16px; border-top: 1px solid #eee; margin-top: 16px;">' +
+    '<button onclick="closeChangesModal()" style="background: #4285f4; color: white; border: none; padding: 10px 24px; border-radius: 4px; cursor: pointer; font-size: 14px;">Done</button>' +
+    '</div>';
   }
 
   document.getElementById('changesModal').classList.add('active');
