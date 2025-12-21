@@ -827,6 +827,95 @@
       margin-bottom: 1px;
     }
 
+    /* Edit mode styles */
+    .edit-btn {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 50%;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 0.2s, background 0.2s;
+      z-index: 10;
+    }
+
+    .node:hover .edit-btn {
+      opacity: 1;
+    }
+
+    .edit-btn:hover {
+      background: #e0e0e0;
+    }
+
+    .node.editing {
+      background: #fff9e6;
+      border: 2px solid #f5a623;
+    }
+
+    .node.editing .edit-btn {
+      display: none;
+    }
+
+    .edit-field {
+      display: block;
+      width: 100%;
+      padding: 4px 8px;
+      margin: 2px 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: inherit;
+      font-family: inherit;
+    }
+
+    .edit-field:focus {
+      outline: none;
+      border-color: #4285f4;
+      box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+    }
+
+    .edit-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 8px;
+    }
+
+    .edit-save-btn, .edit-cancel-btn {
+      padding: 4px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .edit-save-btn {
+      background: #34a853;
+      color: white;
+    }
+
+    .edit-cancel-btn {
+      background: #ea4335;
+      color: white;
+    }
+
+    .field-edited {
+      color: #1a73e8 !important;
+      font-style: italic;
+    }
+
+    .field-edited::after {
+      content: ' ✎';
+      font-size: 10px;
+    }
+
     .node-leader {
       font-style: italic;
       color: #444;
@@ -41228,10 +41317,12 @@ const DATA = {
 let currentCompany = 'astrazeneca';
 let selectedNode = null;
 let overrides = {};
+let fieldEdits = {}; // Store field edits separately from structural moves
 let currentView = 'tree';
 let draggedNodeId = null;
 let dateRange = { start: 0, end: 100 }; // percentages
 let evidenceExpanded = false;
+let editingNodeId = null; // Track which node is currently being edited
 
 // Conflict resolution state (must be before renderTree uses it)
 let conflictResolutions = {};
@@ -41443,21 +41534,37 @@ function renderTree(node, level = 0, rangeStart, rangeEnd) {
     if (changes.size.length) indicators.innerHTML += '<div class="node-change-dot size"></div>';
     nodeEl.appendChild(indicators);
   }
-  
-  // Node name
+
+  // Edit button (pencil icon)
+  const editBtn = document.createElement('button');
+  editBtn.className = 'edit-btn';
+  editBtn.innerHTML = '✏️';
+  editBtn.title = 'Edit entity fields';
+  editBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    startEdit(node.id, nodeEl);
+  });
+  nodeEl.appendChild(editBtn);
+
+  // Node name (use edited value if available)
   const nameEl = document.createElement('div');
-  nameEl.className = 'node-name';
-  nameEl.textContent = node.name;
+  nameEl.className = 'node-name' + (isFieldEdited(node.id, 'name') ? ' field-edited' : '');
+  nameEl.textContent = getFieldValue(node, 'name');
   nodeEl.appendChild(nameEl);
-  
-  // Leader
+
+  // Leader (use edited values if available)
   if (node.leader?.name) {
     const leaderEl = document.createElement('div');
     leaderEl.className = 'node-leader';
 
     // Check for verification data
     const verification = node.leader.verification;
-    let leaderText = node.leader.title ? `${node.leader.name}, ${node.leader.title}` : node.leader.name;
+    // Use edited values if available
+    const displayLeaderName = getFieldValue(node, 'leaderName');
+    const displayLeaderTitle = getFieldValue(node, 'leaderTitle');
+    let leaderText = displayLeaderTitle ? `${displayLeaderName}, ${displayLeaderTitle}` : displayLeaderName;
+    const hasEditedLeader = isFieldEdited(node.id, 'leaderName') || isFieldEdited(node.id, 'leaderTitle');
+    if (hasEditedLeader) leaderEl.classList.add('field-edited');
 
     // Check if this conflict has been resolved
     const resolutionKey = getResolutionKey(currentCompany, node.id, node.leader.name);
@@ -41905,6 +42012,130 @@ function renderCompany(companyKey) {
   document.getElementById('evidenceTitleText').textContent = 'Source Evidence';
 }
 
+// Get field edit for an entity (returns the edited value or original)
+function getFieldValue(node, field) {
+  const edit = fieldEdits[node.id];
+  if (edit && edit[field]?.edited !== undefined) {
+    return edit[field].edited;
+  }
+  // Return original value based on field
+  if (field === 'name') return node.name;
+  if (field === 'leaderName') return node.leader?.name || '';
+  if (field === 'leaderTitle') return node.leader?.title || '';
+  return '';
+}
+
+// Check if a field has been edited
+function isFieldEdited(nodeId, field) {
+  const edit = fieldEdits[nodeId];
+  return edit && edit[field]?.edited !== undefined;
+}
+
+// Start editing a node
+function startEdit(nodeId, nodeEl) {
+  if (editingNodeId) {
+    // Cancel any existing edit first
+    cancelEdit();
+  }
+  editingNodeId = nodeId;
+  nodeEl.classList.add('editing');
+
+  const node = findNodeById(DATA[currentCompany].root, nodeId);
+  if (!node) return;
+
+  // Get current values (may be edited already)
+  const currentName = getFieldValue(node, 'name');
+  const currentLeaderName = getFieldValue(node, 'leaderName');
+  const currentLeaderTitle = getFieldValue(node, 'leaderTitle');
+
+  // Store original HTML to restore on cancel
+  nodeEl.dataset.originalHtml = nodeEl.innerHTML;
+
+  // Build edit form
+  const editForm = `
+    <div class="edit-form" style="text-align: left; padding: 8px;">
+      <label style="font-size: 10px; color: #666; display: block; margin-bottom: 2px;">Entity Name</label>
+      <input type="text" class="edit-field" id="edit-name" value="${escapeHtml(currentName)}" placeholder="Entity name">
+
+      <label style="font-size: 10px; color: #666; display: block; margin-top: 8px; margin-bottom: 2px;">Leader Name</label>
+      <input type="text" class="edit-field" id="edit-leaderName" value="${escapeHtml(currentLeaderName)}" placeholder="Leader name">
+
+      <label style="font-size: 10px; color: #666; display: block; margin-top: 8px; margin-bottom: 2px;">Leader Title</label>
+      <input type="text" class="edit-field" id="edit-leaderTitle" value="${escapeHtml(currentLeaderTitle)}" placeholder="Leader title">
+
+      <div class="edit-actions">
+        <button class="edit-save-btn" onclick="event.stopPropagation(); saveEdit('${nodeId}')">✓ Save</button>
+        <button class="edit-cancel-btn" onclick="event.stopPropagation(); cancelEdit()">✕ Cancel</button>
+      </div>
+    </div>
+  `;
+
+  nodeEl.innerHTML = editForm;
+}
+
+// Save field edits
+function saveEdit(nodeId) {
+  const node = findNodeById(DATA[currentCompany].root, nodeId);
+  if (!node) return;
+
+  const newName = document.getElementById('edit-name').value.trim();
+  const newLeaderName = document.getElementById('edit-leaderName').value.trim();
+  const newLeaderTitle = document.getElementById('edit-leaderTitle').value.trim();
+
+  // Check if any changes were made
+  const originalName = node.name;
+  const originalLeaderName = node.leader?.name || '';
+  const originalLeaderTitle = node.leader?.title || '';
+
+  const edits = {};
+  let hasChanges = false;
+
+  if (newName !== originalName) {
+    edits.name = { original: originalName, edited: newName };
+    hasChanges = true;
+  }
+  if (newLeaderName !== originalLeaderName) {
+    edits.leaderName = { original: originalLeaderName, edited: newLeaderName };
+    hasChanges = true;
+  }
+  if (newLeaderTitle !== originalLeaderTitle) {
+    edits.leaderTitle = { original: originalLeaderTitle, edited: newLeaderTitle };
+    hasChanges = true;
+  }
+
+  if (hasChanges) {
+    fieldEdits[nodeId] = {
+      ...fieldEdits[nodeId],
+      ...edits,
+      editedAt: new Date().toISOString(),
+      user: 'anonymous'
+    };
+  } else if (fieldEdits[nodeId]) {
+    // No changes, remove any previous edits for unchanged fields
+    delete fieldEdits[nodeId];
+  }
+
+  editingNodeId = null;
+  renderCompany(currentCompany);
+}
+
+// Cancel edit and restore original view
+function cancelEdit() {
+  const editingEl = document.querySelector('.node.editing');
+  if (editingEl && editingEl.dataset.originalHtml) {
+    editingEl.innerHTML = editingEl.dataset.originalHtml;
+    editingEl.classList.remove('editing');
+  }
+  editingNodeId = null;
+}
+
+// Escape HTML for safe injection
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text || '';
+  return div.innerHTML;
+}
+
 function setView(view) {
   currentView = view;
   document.getElementById('treeViewBtn').classList.toggle('active', view === 'tree');
@@ -41925,8 +42156,8 @@ function renderHistory() {
   document.getElementById('historyCompanyName').textContent = currentCompany;
   const content = document.getElementById('historyContent');
 
-  // Get current company's overrides
-  const companyOverrides = Object.entries(overrides)
+  // Get current company's overrides (structural moves)
+  const companyMoves = Object.entries(overrides)
     .filter(([entityId, _]) => findNodeById(DATA[currentCompany].root, entityId))
     .map(([entityId, override]) => {
       const node = findNodeById(DATA[currentCompany].root, entityId);
@@ -41938,13 +42169,44 @@ function renderHistory() {
         details: `Moved from "${override.originalParent}" to "${override.newParentName}"`,
         user: override.user || 'anonymous'
       };
-    })
+    });
+
+  // Get current company's field edits
+  const companyFieldEdits = Object.entries(fieldEdits)
+    .filter(([entityId, _]) => findNodeById(DATA[currentCompany].root, entityId))
+    .map(([entityId, edit]) => {
+      const node = findNodeById(DATA[currentCompany].root, entityId);
+      const changes = [];
+      if (edit.name) changes.push(`Name: "${edit.name.original}" → "${edit.name.edited}"`);
+      if (edit.leaderName) changes.push(`Leader: "${edit.leaderName.original}" → "${edit.leaderName.edited}"`);
+      if (edit.leaderTitle) changes.push(`Title: "${edit.leaderTitle.original}" → "${edit.leaderTitle.edited}"`);
+      return {
+        type: 'field_edit',
+        entityId,
+        entityName: node ? node.name : entityId,
+        timestamp: edit.editedAt,
+        details: changes.join('; '),
+        user: edit.user || 'anonymous'
+      };
+    });
+
+  // Combine and sort by timestamp (newest first)
+  const allChanges = [...companyMoves, ...companyFieldEdits]
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-  if (companyOverrides.length === 0) {
+  if (allChanges.length === 0) {
     content.innerHTML = '<div style="text-align: center; padding: 40px; color: #999; background: #f9f9f9; border-radius: 8px;">No corrections have been made yet for this company.</div>';
     return;
   }
+
+  const getTypeBadge = (type) => {
+    const colors = {
+      'move': { bg: '#e8f0fe', fg: '#1a73e8' },
+      'field_edit': { bg: '#fef3e6', fg: '#f5a623' }
+    };
+    const c = colors[type] || colors.move;
+    return `<span style="background: ${c.bg}; color: ${c.fg}; padding: 4px 8px; border-radius: 4px; font-size: 12px;">${type.replace('_', ' ')}</span>`;
+  };
 
   content.innerHTML = `
     <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
@@ -41958,11 +42220,11 @@ function renderHistory() {
         </tr>
       </thead>
       <tbody>
-        ${companyOverrides.map(h => `
+        ${allChanges.map(h => `
           <tr style="border-bottom: 1px solid #eee;">
             <td style="padding: 12px; color: #666;">${formatTimestamp(h.timestamp)}</td>
             <td style="padding: 12px; color: #666;">${h.user}</td>
-            <td style="padding: 12px;"><span style="background: #e8f0fe; color: #1a73e8; padding: 4px 8px; border-radius: 4px; font-size: 12px;">${h.type}</span></td>
+            <td style="padding: 12px;">${getTypeBadge(h.type)}</td>
             <td style="padding: 12px; font-weight: 500;">${h.entityName}</td>
             <td style="padding: 12px; color: #333;">${h.details}</td>
           </tr>
@@ -41995,11 +42257,24 @@ function exportJson() {
     }
   }
 
+  const companyFieldEdits = {};
+  for (const [entityId, edit] of Object.entries(fieldEdits)) {
+    if (findNodeById(DATA[currentCompany].root, entityId)) {
+      const node = findNodeById(DATA[currentCompany].root, entityId);
+      companyFieldEdits[entityId] = {
+        ...edit,
+        entityName: node ? node.name : entityId
+      };
+    }
+  }
+
   const exportData = {
     company: currentCompany,
     exportedAt: new Date().toISOString(),
-    totalCorrections: Object.keys(companyOverrides).length,
-    corrections: companyOverrides,
+    totalMoves: Object.keys(companyOverrides).length,
+    totalFieldEdits: Object.keys(companyFieldEdits).length,
+    moves: companyOverrides,
+    fieldEdits: companyFieldEdits,
     verificationConflicts: DATA[currentCompany].verificationConflicts || []
   };
 
@@ -42016,8 +42291,9 @@ function exportJson() {
 
 // Export corrections as CSV
 function exportCsv() {
-  const rows = [['Timestamp', 'User', 'Type', 'Entity ID', 'Entity Name', 'Original Parent', 'New Parent']];
+  const rows = [['Timestamp', 'User', 'Type', 'Entity ID', 'Entity Name', 'Field', 'Before', 'After']];
 
+  // Add structural moves
   for (const [entityId, override] of Object.entries(overrides)) {
     if (findNodeById(DATA[currentCompany].root, entityId)) {
       const node = findNodeById(DATA[currentCompany].root, entityId);
@@ -42027,20 +42303,38 @@ function exportCsv() {
         'move',
         entityId,
         node ? node.name : entityId,
+        'parent',
         override.originalParent || '',
         override.newParentName || ''
       ]);
     }
   }
 
+  // Add field edits
+  for (const [entityId, edit] of Object.entries(fieldEdits)) {
+    if (findNodeById(DATA[currentCompany].root, entityId)) {
+      const node = findNodeById(DATA[currentCompany].root, entityId);
+      const entityName = node ? node.name : entityId;
+      if (edit.name) {
+        rows.push([edit.editedAt || '', edit.user || 'anonymous', 'field_edit', entityId, entityName, 'name', edit.name.original, edit.name.edited]);
+      }
+      if (edit.leaderName) {
+        rows.push([edit.editedAt || '', edit.user || 'anonymous', 'field_edit', entityId, entityName, 'leaderName', edit.leaderName.original, edit.leaderName.edited]);
+      }
+      if (edit.leaderTitle) {
+        rows.push([edit.editedAt || '', edit.user || 'anonymous', 'field_edit', entityId, entityName, 'leaderTitle', edit.leaderTitle.original, edit.leaderTitle.edited]);
+      }
+    }
+  }
+
   // Add verification conflicts
   const conflicts = DATA[currentCompany].verificationConflicts || [];
   if (conflicts.length > 0) {
-    rows.push(['', '', '', '', '', '', '']);  // Empty row separator
-    rows.push(['Verification Conflicts', '', '', '', '', '', '']);
-    rows.push(['Name', 'Entity', 'Gong Title', 'Public Title', 'Source', 'URL', '']);
+    rows.push(['', '', '', '', '', '', '', '']);  // Empty row separator
+    rows.push(['Verification Conflicts', '', '', '', '', '', '', '']);
+    rows.push(['Name', 'Entity', 'Gong Title', 'Public Title', 'Source', 'URL', '', '']);
     conflicts.forEach(c => {
-      rows.push([c.name, c.entityName, c.gong_title || '', c.public_title || '', c.source_name || 'Public', c.source_url || '', '']);
+      rows.push([c.name, c.entityName, c.gong_title || '', c.public_title || '', c.source_name || 'Public', c.source_url || '', '', '']);
     });
   }
 
