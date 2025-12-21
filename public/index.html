@@ -1038,6 +1038,11 @@
       <div class="view-toggle">
         <button id="treeViewBtn" class="active">Tree</button>
         <button id="tableViewBtn">Table</button>
+        <button id="historyViewBtn">History</button>
+      </div>
+      <div class="export-controls" style="display: inline-flex; gap: 8px; margin-left: 12px;">
+        <button class="export-btn" id="exportCsvBtn" style="background: #34a853; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">Export CSV</button>
+        <button class="export-btn" id="exportJsonBtn" style="background: #4285f4; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">Export JSON</button>
       </div>
       <button class="reset-btn" id="resetAllBtn">Reset overrides on this page - danger</button>
     </div>
@@ -1136,6 +1141,16 @@
       </thead>
       <tbody id="tableBody"></tbody>
     </table>
+  </div>
+
+  <div class="history-container" id="historyContainer" style="display: none;">
+    <div style="padding: 20px;">
+      <h3 style="margin: 0 0 16px 0; color: #333;">Edit History for <span id="historyCompanyName"></span></h3>
+      <p style="color: #666; font-size: 14px; margin-bottom: 20px;">Shows all corrections and overrides made to the org chart. Newest changes appear first.</p>
+      <div id="historyContent">
+        <div style="text-align: center; padding: 40px; color: #999;">Loading history...</div>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -41894,9 +41909,155 @@ function setView(view) {
   currentView = view;
   document.getElementById('treeViewBtn').classList.toggle('active', view === 'tree');
   document.getElementById('tableViewBtn').classList.toggle('active', view === 'table');
+  document.getElementById('historyViewBtn').classList.toggle('active', view === 'history');
   document.getElementById('treeContainer').classList.toggle('hidden', view !== 'tree');
   document.getElementById('tableContainer').classList.toggle('active', view === 'table');
+  document.getElementById('historyContainer').style.display = view === 'history' ? 'block' : 'none';
   document.getElementById('evidencePanel').style.display = view === 'tree' ? 'flex' : 'none';
+
+  if (view === 'history') {
+    renderHistory();
+  }
+}
+
+// Render history view showing all corrections
+function renderHistory() {
+  document.getElementById('historyCompanyName').textContent = currentCompany;
+  const content = document.getElementById('historyContent');
+
+  // Get current company's overrides
+  const companyOverrides = Object.entries(overrides)
+    .filter(([entityId, _]) => findNodeById(DATA[currentCompany].root, entityId))
+    .map(([entityId, override]) => {
+      const node = findNodeById(DATA[currentCompany].root, entityId);
+      return {
+        type: 'move',
+        entityId,
+        entityName: node ? node.name : entityId,
+        timestamp: override.savedAt || override.movedAt,
+        details: `Moved from "${override.originalParent}" to "${override.newParentName}"`,
+        user: override.user || 'anonymous'
+      };
+    })
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  if (companyOverrides.length === 0) {
+    content.innerHTML = '<div style="text-align: center; padding: 40px; color: #999; background: #f9f9f9; border-radius: 8px;">No corrections have been made yet for this company.</div>';
+    return;
+  }
+
+  content.innerHTML = `
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+      <thead>
+        <tr style="background: #f5f5f5; border-bottom: 2px solid #ddd;">
+          <th style="padding: 12px; text-align: left;">Timestamp</th>
+          <th style="padding: 12px; text-align: left;">User</th>
+          <th style="padding: 12px; text-align: left;">Type</th>
+          <th style="padding: 12px; text-align: left;">Entity</th>
+          <th style="padding: 12px; text-align: left;">Change Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${companyOverrides.map(h => `
+          <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 12px; color: #666;">${formatTimestamp(h.timestamp)}</td>
+            <td style="padding: 12px; color: #666;">${h.user}</td>
+            <td style="padding: 12px;"><span style="background: #e8f0fe; color: #1a73e8; padding: 4px 8px; border-radius: 4px; font-size: 12px;">${h.type}</span></td>
+            <td style="padding: 12px; font-weight: 500;">${h.entityName}</td>
+            <td style="padding: 12px; color: #333;">${h.details}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// Format timestamp for display
+function formatTimestamp(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  return d.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true
+  });
+}
+
+// Export corrections as JSON
+function exportJson() {
+  const companyOverrides = {};
+  for (const [entityId, override] of Object.entries(overrides)) {
+    if (findNodeById(DATA[currentCompany].root, entityId)) {
+      const node = findNodeById(DATA[currentCompany].root, entityId);
+      companyOverrides[entityId] = {
+        ...override,
+        entityName: node ? node.name : entityId
+      };
+    }
+  }
+
+  const exportData = {
+    company: currentCompany,
+    exportedAt: new Date().toISOString(),
+    totalCorrections: Object.keys(companyOverrides).length,
+    corrections: companyOverrides,
+    verificationConflicts: DATA[currentCompany].verificationConflicts || []
+  };
+
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${currentCompany}-corrections-${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Export corrections as CSV
+function exportCsv() {
+  const rows = [['Timestamp', 'User', 'Type', 'Entity ID', 'Entity Name', 'Original Parent', 'New Parent']];
+
+  for (const [entityId, override] of Object.entries(overrides)) {
+    if (findNodeById(DATA[currentCompany].root, entityId)) {
+      const node = findNodeById(DATA[currentCompany].root, entityId);
+      rows.push([
+        override.savedAt || override.movedAt || '',
+        override.user || 'anonymous',
+        'move',
+        entityId,
+        node ? node.name : entityId,
+        override.originalParent || '',
+        override.newParentName || ''
+      ]);
+    }
+  }
+
+  // Add verification conflicts
+  const conflicts = DATA[currentCompany].verificationConflicts || [];
+  if (conflicts.length > 0) {
+    rows.push(['', '', '', '', '', '', '']);  // Empty row separator
+    rows.push(['Verification Conflicts', '', '', '', '', '', '']);
+    rows.push(['Name', 'Entity', 'Gong Title', 'Public Title', 'Source', 'URL', '']);
+    conflicts.forEach(c => {
+      rows.push([c.name, c.entityName, c.gong_title || '', c.public_title || '', c.source_name || 'Public', c.source_url || '', '']);
+    });
+  }
+
+  const csvContent = rows.map(row => row.map(cell =>
+    typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))
+      ? `"${cell.replace(/"/g, '""')}"` : cell
+  ).join(',')).join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${currentCompany}-corrections-${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function toggleEvidence() {
@@ -41921,6 +42082,9 @@ loadOverrides(true); // rerender=true to refresh when API data arrives
 document.getElementById('companySelect').addEventListener('change', e => renderCompany(e.target.value));
 document.getElementById('treeViewBtn').addEventListener('click', () => setView('tree'));
 document.getElementById('tableViewBtn').addEventListener('click', () => setView('table'));
+document.getElementById('historyViewBtn').addEventListener('click', () => setView('history'));
+document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
+document.getElementById('exportJsonBtn').addEventListener('click', exportJson);
 document.getElementById('evidenceHeader').addEventListener('click', toggleEvidence);
 
 document.getElementById('resetAllBtn').addEventListener('click', () => {
