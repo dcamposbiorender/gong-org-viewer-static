@@ -42020,10 +42020,10 @@ function renderCompany(companyKey) {
   // Update change counts
   const counts = countChangesInRange(rangeStart, rangeEnd);
   const verificationConflicts = data.verificationConflicts || [];
-  document.getElementById('conflictCount').textContent = verificationConflicts.length;
-  document.getElementById('reorgCount').textContent = counts.reorgs;
-  document.getElementById('leadershipCount').textContent = counts.leadership;
-  document.getElementById('sizeCount').textContent = counts.size;
+  document.getElementById('conflictCount').textContent = formatNumber(verificationConflicts.length);
+  document.getElementById('reorgCount').textContent = formatNumber(counts.reorgs);
+  document.getElementById('leadershipCount').textContent = formatNumber(counts.leadership);
+  document.getElementById('sizeCount').textContent = formatNumber(counts.size);
 
   // Update disabled state on badges
   const changeSummary = document.getElementById('changeSummary');
@@ -42064,6 +42064,12 @@ function getFieldValue(node, field) {
 function isFieldEdited(nodeId, field) {
   const edit = fieldEdits[nodeId];
   return edit && edit[field]?.edited !== undefined;
+}
+
+// Format numbers with commas for legibility (1000 → 1,000)
+function formatNumber(num) {
+  if (num === null || num === undefined) return '0';
+  return num.toLocaleString();
 }
 
 // Start editing a node
