@@ -253,6 +253,7 @@
     .change-dot.leadership { background: #0891b2; }
     .change-dot.size { background: #059669; }
     .change-dot.conflict { background: #dc2626; }
+    .change-dot.duplicate { background: #f59e0b; }
 
     /* Verification badges */
     .verification-badge {
@@ -422,6 +423,177 @@
 
     .verification-badge.resolved {
       background: #3b82f6;
+    }
+
+    /* Merge modal (for duplicate entities) */
+    .merge-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+    }
+
+    .merge-modal.active {
+      display: flex;
+    }
+
+    .merge-modal-content {
+      background: white;
+      border-radius: 8px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .merge-group {
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+
+    .merge-group-header {
+      background: #f9f9f9;
+      padding: 12px 16px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .merge-group-count {
+      font-size: 12px;
+      color: #666;
+      font-weight: normal;
+    }
+
+    .merge-entity {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .merge-entity:last-child {
+      border-bottom: none;
+    }
+
+    .merge-entity:hover {
+      background: #f9f9f9;
+    }
+
+    .merge-entity.canonical {
+      background: #f0fdf4;
+    }
+
+    .merge-entity.to-merge {
+      background: #fef3e6;
+    }
+
+    .merge-entity-radio {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #ccc;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .merge-entity.canonical .merge-entity-radio {
+      border-color: #059669;
+      background: #059669;
+    }
+
+    .merge-entity.canonical .merge-entity-radio::after {
+      content: '✓';
+      color: white;
+      font-size: 12px;
+    }
+
+    .merge-entity-checkbox {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #ccc;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .merge-entity.to-merge .merge-entity-checkbox {
+      border-color: #f59e0b;
+      background: #f59e0b;
+    }
+
+    .merge-entity.to-merge .merge-entity-checkbox::after {
+      content: '✓';
+      color: white;
+      font-size: 12px;
+    }
+
+    .merge-entity-info {
+      flex: 1;
+    }
+
+    .merge-entity-name {
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+
+    .merge-entity-leader {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .merge-entity-snippets {
+      font-size: 11px;
+      color: #999;
+    }
+
+    .merge-actions {
+      display: flex;
+      gap: 8px;
+      padding: 8px 16px;
+      background: #f9f9f9;
+      border-top: 1px solid #e5e5e5;
+    }
+
+    .merge-btn {
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid #ddd;
+      background: white;
+    }
+
+    .merge-btn-valid {
+      color: #059669;
+    }
+
+    .merge-btn-merge {
+      background: #1a1a1a;
+      color: white;
+      border: none;
+    }
+
+    .merge-btn-merge:disabled {
+      background: #ccc;
+      cursor: not-allowed;
     }
 
     /* Changes modal */
@@ -1169,6 +1341,10 @@
     <div class="change-dot size"></div>
     <span><strong id="sizeCount">0</strong> size changes</span>
   </div>
+  <div class="change-stat" data-type="duplicates">
+    <div class="change-dot duplicate"></div>
+    <span><strong id="duplicateCount">0</strong> potential duplicates</span>
+  </div>
 </div>
 
 <!-- Changes Modal -->
@@ -1195,6 +1371,22 @@
     <div class="resolve-modal-footer">
       <button class="resolve-btn resolve-btn-cancel" id="resolveCancel">Cancel</button>
       <button class="resolve-btn resolve-btn-save" id="resolveSave" disabled>Save Resolution</button>
+    </div>
+  </div>
+</div>
+
+<!-- Merge Duplicates Modal -->
+<div class="merge-modal" id="mergeModal">
+  <div class="merge-modal-content">
+    <div class="resolve-modal-header">
+      <h3>Potential Duplicate Entities</h3>
+      <button class="changes-modal-close" id="mergeModalClose">&times;</button>
+    </div>
+    <div class="resolve-modal-body" id="mergeModalBody">
+      <!-- Populated by JS -->
+    </div>
+    <div class="resolve-modal-footer">
+      <button class="resolve-btn resolve-btn-cancel" id="mergeModalDone">Done</button>
     </div>
   </div>
 </div>
@@ -41341,10 +41533,241 @@ let editingNodeId = null; // Track which node is currently being edited
 // Conflict resolution state (must be before renderTree uses it)
 let conflictResolutions = {};
 
+// Entity merges - when duplicate leaders indicate same org with different names
+let entityMerges = {}; // { canonicalEntityId: { absorbed: [entityIds], aliases: [...], mergedSnippets: [...] } }
+
 // Get resolution key for a conflict
 function getResolutionKey(company, entityId, leaderName) {
   return `${company}:${entityId}:${leaderName}`.toLowerCase();
 }
+
+// ===== DUPLICATE DETECTION & MERGE FUNCTIONS =====
+
+// Collect all nodes from tree into flat array
+function collectAllNodes(node, result = []) {
+  if (!node) return result;
+  result.push(node);
+  if (node.children) {
+    node.children.forEach(child => collectAllNodes(child, result));
+  }
+  return result;
+}
+
+// Check if entity has been absorbed by another
+function isEntityAbsorbed(entityId) {
+  for (const [canonicalId, merge] of Object.entries(entityMerges)) {
+    if (merge.absorbed && merge.absorbed.includes(entityId)) {
+      return canonicalId;
+    }
+  }
+  return null;
+}
+
+// Find duplicate leaders (same name appearing on multiple entities)
+function findDuplicateLeaders() {
+  const data = DATA[currentCompany];
+  if (!data?.root) return [];
+
+  const allNodes = collectAllNodes(data.root);
+  const leaderMap = {}; // { leaderName: [nodes] }
+
+  allNodes.forEach(node => {
+    // Skip absorbed entities
+    if (isEntityAbsorbed(node.id)) return;
+
+    const leaderName = node.leader?.name?.trim();
+    if (leaderName && leaderName !== '(no leader)') {
+      if (!leaderMap[leaderName]) {
+        leaderMap[leaderName] = [];
+      }
+      leaderMap[leaderName].push(node);
+    }
+  });
+
+  // Return only leaders appearing on 2+ entities, excluding "valid" duplicates
+  const duplicates = [];
+  for (const [name, nodes] of Object.entries(leaderMap)) {
+    if (nodes.length >= 2) {
+      // Check if marked as valid
+      const validKey = `validDuplicate:${currentCompany}:${name}`;
+      if (!localStorage.getItem(validKey)) {
+        duplicates.push({ leaderName: name, entities: nodes });
+      }
+    }
+  }
+
+  return duplicates.sort((a, b) => b.entities.length - a.entities.length);
+}
+
+// Get count of duplicate leader groups
+function getDuplicateCount() {
+  return findDuplicateLeaders().length;
+}
+
+// Show duplicates modal
+function showDuplicatesModal() {
+  const duplicates = findDuplicateLeaders();
+  const modal = document.getElementById('mergeModal');
+  const body = document.getElementById('mergeModalBody');
+
+  if (duplicates.length === 0) {
+    body.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;">No duplicate leaders found.</div>';
+  } else {
+    body.innerHTML = duplicates.map((dup, groupIdx) => {
+      const snippetCounts = dup.entities.map(n => (n.snippets?.length || 0));
+      const totalSnippets = snippetCounts.reduce((a, b) => a + b, 0);
+
+      return `
+        <div class="merge-group" data-leader="${dup.leaderName.replace(/"/g, '&quot;')}">
+          <div class="merge-group-header">
+            <span>${dup.leaderName}</span>
+            <span class="merge-group-count">${dup.entities.length} entities · ${totalSnippets} snippets</span>
+          </div>
+          ${dup.entities.map((entity, idx) => `
+            <div class="merge-entity"
+                 data-entity-id="${entity.id}"
+                 data-group="${groupIdx}"
+                 onclick="toggleMergeEntity(this, ${groupIdx})">
+              <div class="merge-entity-radio"></div>
+              <div class="merge-entity-info">
+                <div class="merge-entity-name">${entity.name}</div>
+                <div class="merge-entity-leader">${entity.leader?.title || '(no title)'}</div>
+                <div class="merge-entity-snippets">${entity.snippets?.length || 0} snippets</div>
+              </div>
+            </div>
+          `).join('')}
+          <div class="merge-actions">
+            <button class="merge-btn merge-btn-valid" onclick="markAsValid('${dup.leaderName.replace(/'/g, "\\'")}')">This is Valid ✓</button>
+            <button class="merge-btn merge-btn-merge" data-group="${groupIdx}" disabled onclick="executeMerge(${groupIdx})">Merge Selected</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  modal.classList.add('active');
+}
+
+// Track merge selections per group
+const mergeSelections = {}; // { groupIdx: { canonical: entityId, toMerge: [entityIds] } }
+
+// Toggle entity selection in merge modal
+function toggleMergeEntity(el, groupIdx) {
+  const entityId = el.dataset.entityId;
+
+  if (!mergeSelections[groupIdx]) {
+    mergeSelections[groupIdx] = { canonical: null, toMerge: [] };
+  }
+
+  const sel = mergeSelections[groupIdx];
+
+  // If no canonical selected yet, this becomes canonical
+  if (!sel.canonical) {
+    sel.canonical = entityId;
+    el.classList.add('canonical');
+    el.querySelector('.merge-entity-radio').style.display = 'flex';
+    el.querySelector('.merge-entity-radio').classList.add('selected');
+  }
+  // If clicking the canonical, deselect it
+  else if (sel.canonical === entityId) {
+    sel.canonical = null;
+    el.classList.remove('canonical');
+    // Move first toMerge to canonical if any
+    if (sel.toMerge.length > 0) {
+      const newCanonical = sel.toMerge.shift();
+      sel.canonical = newCanonical;
+      const newEl = el.parentElement.querySelector(`[data-entity-id="${newCanonical}"]`);
+      if (newEl) {
+        newEl.classList.remove('to-merge');
+        newEl.classList.add('canonical');
+      }
+    }
+  }
+  // Otherwise toggle as merge target
+  else {
+    const idx = sel.toMerge.indexOf(entityId);
+    if (idx >= 0) {
+      sel.toMerge.splice(idx, 1);
+      el.classList.remove('to-merge');
+    } else {
+      sel.toMerge.push(entityId);
+      el.classList.add('to-merge');
+    }
+  }
+
+  // Update merge button state
+  const mergeBtn = el.closest('.merge-group').querySelector('.merge-btn-merge');
+  mergeBtn.disabled = !(sel.canonical && sel.toMerge.length > 0);
+}
+
+// Mark a duplicate group as valid (person legitimately leads multiple orgs)
+function markAsValid(leaderName) {
+  // Store as a "valid duplicate" so it doesn't show up again
+  const key = `validDuplicate:${currentCompany}:${leaderName}`;
+  localStorage.setItem(key, 'true');
+
+  // Re-render to remove from count
+  renderCompany(currentCompany);
+  showDuplicatesModal(); // Refresh modal
+}
+
+// Execute the merge
+function executeMerge(groupIdx) {
+  const sel = mergeSelections[groupIdx];
+  if (!sel || !sel.canonical || sel.toMerge.length === 0) return;
+
+  const data = DATA[currentCompany];
+  const canonicalNode = findNodeById(data.root, sel.canonical);
+
+  // Collect snippets and info from entities being merged
+  const mergedSnippets = [];
+  const aliases = [];
+
+  sel.toMerge.forEach(entityId => {
+    const node = findNodeById(data.root, entityId);
+    if (node) {
+      aliases.push(node.name);
+      if (node.snippets) {
+        node.snippets.forEach(s => {
+          mergedSnippets.push({
+            ...s,
+            fromEntity: entityId,
+            fromEntityName: node.name
+          });
+        });
+      }
+    }
+  });
+
+  // Store the merge
+  entityMerges[sel.canonical] = {
+    mergedAt: new Date().toISOString(),
+    user: 'anonymous',
+    absorbed: sel.toMerge,
+    aliases: aliases,
+    mergedSnippets: mergedSnippets
+  };
+
+  // Save to localStorage
+  localStorage.setItem('entityMerges', JSON.stringify(entityMerges));
+
+  // Clear selection for this group
+  delete mergeSelections[groupIdx];
+
+  // Re-render
+  renderCompany(currentCompany);
+  showDuplicatesModal(); // Refresh modal
+}
+
+// Load entity merges from localStorage
+function loadEntityMerges() {
+  const saved = localStorage.getItem('entityMerges');
+  if (saved) {
+    entityMerges = JSON.parse(saved);
+  }
+}
+
+// ===== END DUPLICATE DETECTION =====
 
 // Load overrides from API (with localStorage fallback for offline)
 async function loadOverrides(rerender = false) {
@@ -41412,29 +41835,40 @@ function isInDateRange(dateStr, rangeStart, rangeEnd) {
 
 // Build working tree with overrides
 function buildWorkingTree(node, parent = null) {
+  // Skip absorbed entities (merged into another)
+  if (isEntityAbsorbed(node.id)) return null;
+
   const clone = { ...node, originalParent: parent?.id || null, children: [] };
   const override = overrides[node.id];
   if (override) clone.override = override;
-  
+
+  // Add merge info if this entity has absorbed others
+  if (entityMerges[node.id]) {
+    clone.mergeInfo = entityMerges[node.id];
+  }
+
   if (node.children) {
     node.children.forEach(child => {
       if (!overrides[child.id] || overrides[child.id].newParent === node.id) {
-        clone.children.push(buildWorkingTree(child, node));
+        const childClone = buildWorkingTree(child, node);
+        if (childClone) clone.children.push(childClone); // Skip nulls (absorbed)
       }
     });
   }
-  
+
   Object.entries(overrides).forEach(([nodeId, ov]) => {
     if (ov.newParent === node.id && nodeId !== node.id) {
       const movedNode = findNodeById(DATA[currentCompany].root, nodeId);
-      if (movedNode) {
+      if (movedNode && !isEntityAbsorbed(nodeId)) {
         const movedClone = buildWorkingTree(movedNode, node);
-        movedClone.override = ov;
-        clone.children.push(movedClone);
+        if (movedClone) {
+          movedClone.override = ov;
+          clone.children.push(movedClone);
+        }
       }
     }
   });
-  
+
   return clone;
 }
 
@@ -41750,7 +42184,17 @@ function selectNode(node, nodeEl, rangeStart, rangeEnd) {
       </div>
     `;
   }
-  
+
+  // Merge info badge (if this entity absorbed others)
+  if (node.mergeInfo) {
+    html += `
+      <div class="override-badge" style="background: #fef3e6; border-color: #f59e0b;">
+        ⊕ Merged with: ${node.mergeInfo.aliases.join(', ')}
+        <button class="reset-node-btn" onclick="undoMerge('${node.id}')" style="color: #f59e0b;">undo</button>
+      </div>
+    `;
+  }
+
   html += '</div><div class="evidence-snippets">';
 
   // External data snippet (verified leader info)
@@ -41814,9 +42258,39 @@ function selectNode(node, nodeEl, rangeStart, rangeEnd) {
       </div>
     `;
   });
-  
+
+  // Merged snippets (from absorbed entities)
+  if (node.mergeInfo?.mergedSnippets?.length > 0) {
+    html += '<div style="margin-top: 16px; padding-top: 16px; border-top: 2px dashed #f59e0b;">';
+    html += '<div style="font-size: 12px; color: #f59e0b; margin-bottom: 8px; font-weight: 600;">Merged from other entities:</div>';
+    node.mergeInfo.mergedSnippets
+      .filter(s => isInDateRange(s.date, rangeStart, rangeEnd))
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .forEach(s => {
+        html += `
+          <div class="snippet-card" style="border-left: 3px solid #f59e0b;">
+            <div class="snippet-date">
+              ${s.date}
+              <span class="snippet-tag" style="background: #fef3e6; color: #f59e0b;">from: ${s.fromEntityName}</span>
+            </div>
+            <div class="snippet-quote">"${s.quote}"</div>
+            <div class="snippet-attribution">
+              <span>
+                ${s.internalName ? `Internal: ${s.internalName}` : ''}
+                ${s.internalName && s.customerName ? ' | ' : ''}
+                ${s.customerName ? `Customer: ${s.customerName}` : ''}
+                ${!s.internalName && !s.customerName ? '—' : ''}
+              </span>
+              <a href="${s.gongUrl}" class="snippet-link" target="_blank">↗ Gong</a>
+            </div>
+          </div>
+        `;
+      });
+    html += '</div>';
+  }
+
   html += '</div>';
-  
+
   content.innerHTML = html;
   document.getElementById('evidenceEmpty').style.display = 'none';
   document.getElementById('evidenceTitleText').textContent = `Source Evidence — ${node.name}`;
@@ -41828,8 +42302,22 @@ window.resetNodeOverride = function(nodeId) {
   renderCompany(currentCompany);
 };
 
+// Undo a merge
+window.undoMerge = function(canonicalId) {
+  delete entityMerges[canonicalId];
+  localStorage.setItem('entityMerges', JSON.stringify(entityMerges));
+  renderCompany(currentCompany);
+};
+
 // Table
 function collectAllSnippets(node, results = [], rangeStart, rangeEnd) {
+  // Skip absorbed entities
+  if (isEntityAbsorbed(node.id)) {
+    // Still recurse to children
+    node.children?.forEach(child => collectAllSnippets(child, results, rangeStart, rangeEnd));
+    return results;
+  }
+
   node.snippets?.filter(s => isInDateRange(s.date, rangeStart, rangeEnd)).forEach(s => {
     results.push({
       entityId: node.id,
@@ -42024,6 +42512,8 @@ function renderCompany(companyKey) {
   document.getElementById('reorgCount').textContent = formatNumber(counts.reorgs);
   document.getElementById('leadershipCount').textContent = formatNumber(counts.leadership);
   document.getElementById('sizeCount').textContent = formatNumber(counts.size);
+  const duplicateCount = getDuplicateCount();
+  document.getElementById('duplicateCount').textContent = formatNumber(duplicateCount);
 
   // Update disabled state on badges
   const changeSummary = document.getElementById('changeSummary');
@@ -42032,6 +42522,7 @@ function renderCompany(companyKey) {
   badges[1].classList.toggle('disabled', counts.reorgs === 0);
   badges[2].classList.toggle('disabled', counts.leadership === 0);
   badges[3].classList.toggle('disabled', counts.size === 0);
+  badges[4].classList.toggle('disabled', duplicateCount === 0);
   
   // Render tree
   const workingTree = buildWorkingTree(data.root);
@@ -42470,6 +42961,19 @@ badges[3].addEventListener('click', function() {
     showChanges('size');
   }
 });
+badges[4].addEventListener('click', function() {
+  if (!this.classList.contains('disabled')) {
+    showDuplicatesModal();
+  }
+});
+
+// Merge modal close handler
+document.getElementById('mergeModalClose').addEventListener('click', () => {
+  document.getElementById('mergeModal').classList.remove('active');
+});
+document.getElementById('mergeModalDone').addEventListener('click', () => {
+  document.getElementById('mergeModal').classList.remove('active');
+});
 
 // Show verification conflicts modal
 function showVerificationConflicts() {
@@ -42562,6 +43066,9 @@ document.querySelectorAll('.snippets-table th.sortable').forEach(th => {
     renderTable(getDateFromPercent(dateRange.start, data.dateRange), getDateFromPercent(dateRange.end, data.dateRange));
   });
 });
+
+// Load entity merges from localStorage on startup
+loadEntityMerges();
 
 renderCompany('astrazeneca');
 
