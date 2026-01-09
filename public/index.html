@@ -1892,9 +1892,9 @@
     </div>
     
     <div class="header-controls">
-      <button class="reset-btn" id="duplicatesBtn" onclick="showDuplicatesModal()" style="background: #ff9800; position: relative;">
+      <button class="reset-btn" id="duplicatesBtn" onclick="showDuplicatesModal()" style="background: #8b7355; position: relative;">
         Duplicates
-        <span id="duplicatesBadge" style="position: absolute; top: -6px; right: -6px; background: #f44336; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; display: none;">0</span>
+        <span id="duplicatesBadge" style="position: absolute; top: -6px; right: -6px; background: #c9302c; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; display: none;">0</span>
       </button>
       <div class="view-toggle">
         <button id="treeViewBtn" class="active">Tree</button>
@@ -76328,7 +76328,11 @@ function showDuplicatesModal() {
   if (duplicates.length === 0) {
     body.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;">No duplicate leaders found.</div>';
   } else {
-    body.innerHTML = duplicates.map((dup, groupIdx) => {
+    body.innerHTML = `
+      <div style="background: #f5f5f5; padding: 8px 12px; margin-bottom: 12px; border-radius: 4px; font-size: 12px; color: #666;">
+        <strong>How to merge:</strong> Click entities to select canonical (green) and to-merge (red), then click "Merge Selected"
+      </div>
+    ` + duplicates.map((dup, groupIdx) => {
       const snippetCounts = dup.entities.map(n => (n.snippets?.length || 0));
       const totalSnippets = snippetCounts.reduce((a, b) => a + b, 0);
 
@@ -76351,9 +76355,8 @@ function showDuplicatesModal() {
               </div>
             `).join('')}
           </div>
-          <div class="merge-actions" style="margin-top: 8px; display: flex; gap: 8px;">
+          <div class="merge-actions" style="margin-top: 8px;">
             <button class="merge-btn" onclick="executeMerge(${groupIdx})" disabled style="background: #4CAF50; color: white; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; opacity: 0.5;">Merge Selected</button>
-            <span class="merge-hint" style="font-size: 11px; color: #999; align-self: center;">Click entities to select canonical (green) and to-merge (red)</span>
           </div>
         </div>
       `;
@@ -76529,13 +76532,16 @@ function handleSizeChipClick(event, nodeId, sizeIdx, snippetIdx) {
         }
       }, 0);
     } else {
-      // Auto mode - also re-render the org chart to update displayed size
-      const nodeEl = document.querySelector('.node.selected');
-      if (selectedNode && nodeEl) {
-        selectNode(selectedNode, nodeEl, rangeStart, rangeEnd);
-      }
-      // Re-render tree to update the node meta
-      renderTree();
+      // Auto mode - re-render to update displayed size in tree
+      renderCompany(currentCompany);
+      // Re-select the node after re-render
+      setTimeout(() => {
+        const nodeEl = document.querySelector(`.node[data-id="${nodeId}"]`);
+        if (nodeEl && selectedNode) {
+          nodeEl.classList.add('selected');
+          selectNode(selectedNode, nodeEl);
+        }
+      }, 0);
     }
   }
   // Shift+click: only scroll, don't change selection
@@ -76778,9 +76784,9 @@ function renderTree(node, level = 0, rangeStart, rangeEnd) {
   // Add edit pencil icon
   const editBtn = document.createElement('span');
   editBtn.className = 'edit-btn';
-  editBtn.innerHTML = '✏️';
+  editBtn.innerHTML = '✎';
   editBtn.title = 'Edit entity';
-  editBtn.style.cssText = 'cursor: pointer; margin-left: 6px; font-size: 12px; opacity: 0.5;';
+  editBtn.style.cssText = 'cursor: pointer; margin-left: 6px; font-size: 11px; color: #8b7355;';
   editBtn.onclick = (e) => {
     e.stopPropagation();
     startEdit(node.id, nodeEl);
@@ -78205,7 +78211,7 @@ function showManualNodeEvidence(node) {
 
   // Show matched contacts/people (LinkedIn/external matches)
   if (matchedContacts.length > 0) {
-    html += '<div class="evidence-contacts"><h5 style="margin: 12px 0 8px; font-size: 12px; color: #666;">People</h5>';
+    html += '<div class="evidence-contacts" style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e0e0e0;"><h5 style="margin: 0 0 8px; font-size: 12px; color: #666;">People</h5>';
     matchedContacts.forEach(c => {
       html += `
         <div style="padding: 6px 0; border-bottom: 1px solid #eee; font-size: 12px;">
