@@ -76325,6 +76325,175 @@ function findManualNodeById(node, id) {
   return null;
 }
 
+// Find parent of a node in Manual Map tree
+function findManualNodeParent(node, targetId, parent = null) {
+  if (!node) return null;
+  if (node.id === targetId) return parent;
+  if (node.children) {
+    for (const child of node.children) {
+      const found = findManualNodeParent(child, targetId, node);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// ===== MANUAL MAP CRUD =====
+
+// State for tracking Manual Map modifications
+let manualMapModifications = {}; // { companyKey: { added: [], deleted: [] } }
+
+// Show modal to add a new child entity
+function showAddChildModal(parentId) {
+  const parentNode = findManualNodeById(MANUAL_DATA[currentCompany]?.root, parentId);
+  if (!parentNode) return;
+
+  const name = prompt(`Enter name for new entity under "${parentNode.name}":`);
+  if (!name || !name.trim()) return;
+
+  addManualMapChild(parentId, name.trim());
+}
+
+// Add a new child to a Manual Map node
+function addManualMapChild(parentId, name) {
+  const root = MANUAL_DATA[currentCompany]?.root;
+  if (!root) return;
+
+  const parentNode = findManualNodeById(root, parentId);
+  if (!parentNode) return;
+
+  // Generate unique ID
+  const newId = `manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // Create new node
+  const newNode = {
+    id: newId,
+    name: name,
+    type: 'group',
+    level: (parentNode.level || 0) + 1,
+    sites: [],
+    notes: `Added manually on ${new Date().toISOString().split('T')[0]}`,
+    gongEvidence: {
+      status: 'unverified',
+      totalMentions: 0,
+      matchedContacts: [],
+      matchedEntities: [],
+      sizeMentions: [],
+      teamSizes: [],
+      snippets: []
+    },
+    children: []
+  };
+
+  // Add to parent's children
+  if (!parentNode.children) parentNode.children = [];
+  parentNode.children.push(newNode);
+
+  // Track modification
+  if (!manualMapModifications[currentCompany]) {
+    manualMapModifications[currentCompany] = { added: [], deleted: [] };
+  }
+  manualMapModifications[currentCompany].added.push({ id: newId, name, parentId, addedAt: new Date().toISOString() });
+
+  // Save to localStorage
+  saveManualMapModifications();
+
+  // Update stats
+  if (MANUAL_DATA[currentCompany].stats) {
+    MANUAL_DATA[currentCompany].stats.totalNodes = (MANUAL_DATA[currentCompany].stats.totalNodes || 0) + 1;
+  }
+
+  // Re-render
+  renderManualMapView();
+
+  // Select the new node
+  setTimeout(() => {
+    const nodeEl = document.querySelector(`.node[data-id="${newId}"]`);
+    if (nodeEl) {
+      nodeEl.click();
+    }
+  }, 100);
+}
+
+// Confirm and delete an entity
+function confirmDeleteEntity(nodeId) {
+  const node = findManualNodeById(MANUAL_DATA[currentCompany]?.root, nodeId);
+  if (!node) return;
+
+  const childCount = countNodes(node) - 1;
+  let message = `Are you sure you want to delete "${node.name}"?`;
+  if (childCount > 0) {
+    message += `\n\nThis will also delete ${childCount} child ${childCount === 1 ? 'entity' : 'entities'}.`;
+  }
+
+  if (confirm(message)) {
+    deleteManualMapNode(nodeId);
+  }
+}
+
+// Delete a node from Manual Map
+function deleteManualMapNode(nodeId) {
+  const root = MANUAL_DATA[currentCompany]?.root;
+  if (!root) return;
+
+  // Find and remove the node from its parent
+  const parent = findManualNodeParent(root, nodeId);
+  if (!parent || !parent.children) return;
+
+  const nodeToDelete = findManualNodeById(root, nodeId);
+  const deletedCount = countNodes(nodeToDelete);
+
+  // Remove from parent's children
+  parent.children = parent.children.filter(child => child.id !== nodeId);
+
+  // Track modification
+  if (!manualMapModifications[currentCompany]) {
+    manualMapModifications[currentCompany] = { added: [], deleted: [] };
+  }
+  manualMapModifications[currentCompany].deleted.push({
+    id: nodeId,
+    name: nodeToDelete?.name,
+    parentId: parent.id,
+    deletedAt: new Date().toISOString()
+  });
+
+  // Save to localStorage
+  saveManualMapModifications();
+
+  // Update stats
+  if (MANUAL_DATA[currentCompany].stats) {
+    MANUAL_DATA[currentCompany].stats.totalNodes = Math.max(0, (MANUAL_DATA[currentCompany].stats.totalNodes || 0) - deletedCount);
+  }
+
+  // Clear selection
+  selectedManualNode = null;
+
+  // Re-render
+  renderManualMapView();
+}
+
+// Save Manual Map modifications to localStorage
+function saveManualMapModifications() {
+  localStorage.setItem('manualMapModifications', JSON.stringify(manualMapModifications));
+
+  // Also save the updated MANUAL_DATA for graduated maps
+  const graduatedMaps = JSON.parse(localStorage.getItem('graduatedMaps') || '{}');
+  if (graduatedMaps[currentCompany]) {
+    graduatedMaps[currentCompany] = MANUAL_DATA[currentCompany];
+    localStorage.setItem('graduatedMaps', JSON.stringify(graduatedMaps));
+  }
+}
+
+// Load Manual Map modifications (called on init, after loadGraduatedMaps)
+function loadManualMapModifications() {
+  const stored = localStorage.getItem('manualMapModifications');
+  if (stored) {
+    manualMapModifications = JSON.parse(stored);
+  }
+}
+
+// ===== END MANUAL MAP CRUD =====
+
 // ===== MANUAL MAP DRAG-DROP =====
 
 // Build working tree for Manual Map with overrides applied
@@ -78608,6 +78777,9 @@ function showManualNodeEvidence(node) {
       <span class="team-size-override-hint">Enter or click below</span>
     </div>`;
 
+  // Check if this node is the root (can't delete root)
+  const isRoot = !findManualNodeParent(MANUAL_DATA[currentCompany]?.root, node.id);
+
   let html = `
     <div class="evidence-entity-info">
       <h4>${node.name}</h4>
@@ -78628,6 +78800,15 @@ function showManualNodeEvidence(node) {
       ${teamSizeInputHtml}
       ${sizeMentionsHtml}
       ${node.sites?.length > 0 ? `<div class="evidence-info-row"><span class="evidence-info-label">Sites</span><span>${node.sites.join(', ')}</span></div>` : ''}
+      <div class="entity-crud-buttons" style="margin-top: 12px; display: flex; gap: 8px;">
+        <button onclick="showAddChildModal('${node.id}')" style="flex: 1; padding: 6px 12px; font-size: 12px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          + Add Child
+        </button>
+        ${!isRoot ? `
+        <button onclick="confirmDeleteEntity('${node.id}')" style="flex: 1; padding: 6px 12px; font-size: 12px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          Delete
+        </button>` : ''}
+      </div>
     </div>
   `;
 
@@ -78828,6 +79009,7 @@ loadFieldEdits();
 loadEntityMerges();
 loadManualMapOverrides();
 loadGraduatedMaps();
+loadManualMapModifications();
 
 // Update duplicates badge after load
 setTimeout(updateDuplicatesBadge, 100);
