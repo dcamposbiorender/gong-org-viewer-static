@@ -76507,7 +76507,7 @@ function addManualMapChild(parentId, name) {
   if (!parentNode) return;
 
   // Generate unique ID
-  const newId = `manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const newId = `manual-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
   // Create new node
   const newNode = {
@@ -78524,7 +78524,14 @@ function filterCreateEntityParentList() {
     filtered.slice(0, 20).forEach(entity => {
       const item = document.createElement('div');
       item.style.cssText = 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 13px;';
-      item.innerHTML = `<div style="font-weight: 500;">${entity.name}</div><div style="font-size: 11px; color: #888;">${entity.path}</div>`;
+      const nameDiv = document.createElement('div');
+      nameDiv.style.fontWeight = '500';
+      nameDiv.textContent = entity.name;
+      const pathDiv = document.createElement('div');
+      pathDiv.style.cssText = 'font-size: 11px; color: #888;';
+      pathDiv.textContent = entity.path;
+      item.appendChild(nameDiv);
+      item.appendChild(pathDiv);
       item.onclick = () => selectCreateEntityParent(entity);
       item.onmouseover = () => item.style.background = '#f5f5f5';
       item.onmouseout = () => item.style.background = 'transparent';
@@ -78574,7 +78581,7 @@ function createNewEntity() {
     return;
   }
 
-  const newId = `manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const newId = `manual-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   const newNode = {
     id: newId,
     name: name,
@@ -78623,13 +78630,28 @@ function renderDeleteEntityList(entities) {
   deletable.forEach(entity => {
     const item = document.createElement('div');
     item.style.cssText = 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 13px; display: flex; justify-content: space-between; align-items: center;';
-    item.innerHTML = `
-      <div>
-        <div style="font-weight: 500;">${entity.name}</div>
-        <div style="font-size: 11px; color: #888;">${entity.path}</div>
-      </div>
-      <button class="resolve-btn" style="background: #c9302c; color: white; font-size: 11px; padding: 4px 8px;" onclick="event.stopPropagation(); selectDeleteEntity('${entity.id}', '${escapeHtml(entity.name)}', ${entity.hasChildren})">Delete</button>
-    `;
+
+    const infoDiv = document.createElement('div');
+    const nameDiv = document.createElement('div');
+    nameDiv.style.fontWeight = '500';
+    nameDiv.textContent = entity.name;
+    const pathDiv = document.createElement('div');
+    pathDiv.style.cssText = 'font-size: 11px; color: #888;';
+    pathDiv.textContent = entity.path;
+    infoDiv.appendChild(nameDiv);
+    infoDiv.appendChild(pathDiv);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'resolve-btn';
+    deleteBtn.style.cssText = 'background: #c9302c; color: white; font-size: 11px; padding: 4px 8px;';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.onclick = (e) => {
+      e.stopPropagation();
+      selectDeleteEntity(entity.id, entity.name, entity.hasChildren);
+    };
+
+    item.appendChild(infoDiv);
+    item.appendChild(deleteBtn);
     item.onmouseover = () => item.style.background = '#fff3cd';
     item.onmouseout = () => item.style.background = 'transparent';
     listEl.appendChild(item);
