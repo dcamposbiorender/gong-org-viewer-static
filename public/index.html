@@ -1896,6 +1896,9 @@
         Duplicates
         <span id="duplicatesBadge" style="position: absolute; top: -6px; right: -6px; background: #c9302c; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; display: none;">0</span>
       </button>
+      <button class="reset-btn" id="graduateBtn" onclick="showGraduateModal()" style="background: #2563eb;" title="Convert this Auto map to a Manual Map">
+        Graduate ↗
+      </button>
       <div class="view-toggle">
         <button id="treeViewBtn" class="active">Tree</button>
         <button id="tableViewBtn">Table</button>
@@ -1964,6 +1967,42 @@
     </div>
     <div class="resolve-modal-footer">
       <button class="resolve-btn resolve-btn-cancel" onclick="closeDuplicatesModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Graduate Modal -->
+<div class="resolve-modal" id="graduateModal" style="display: none;">
+  <div class="resolve-modal-content" style="max-width: 500px;">
+    <div class="resolve-modal-header">
+      <h3>Graduate to Manual Map</h3>
+      <button class="changes-modal-close" onclick="closeGraduateModal()">&times;</button>
+    </div>
+    <div class="resolve-modal-body" style="padding: 20px;">
+      <p style="margin-bottom: 16px;">This will convert the current <strong>Auto-generated map</strong> (with all your corrections) into a <strong>Manual Map</strong>.</p>
+
+      <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+        <div style="font-weight: 600; margin-bottom: 8px;">What gets included:</div>
+        <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #666;">
+          <li>Current tree structure (with drag-drop reorganizations)</li>
+          <li>Field edits (name changes)</li>
+          <li>Size overrides</li>
+          <li>Entity merges</li>
+        </ul>
+      </div>
+
+      <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #f59e0b;">
+        <div style="font-weight: 600; margin-bottom: 4px; color: #92400e;">⚠️ Note</div>
+        <p style="margin: 0; font-size: 13px; color: #78350f;">If a Manual Map already exists for this company, it will be <strong>replaced</strong>.</p>
+      </div>
+
+      <div id="graduatePreview" style="margin-bottom: 16px;">
+        <!-- Preview stats populated by JS -->
+      </div>
+    </div>
+    <div class="resolve-modal-footer">
+      <button class="resolve-btn resolve-btn-cancel" onclick="closeGraduateModal()">Cancel</button>
+      <button class="resolve-btn resolve-btn-confirm" onclick="performGraduation()" style="background: #2563eb;">Graduate</button>
     </div>
   </div>
 </div>
@@ -76599,6 +76638,171 @@ function closeDuplicatesModal() {
   mergeSelections = {};
 }
 
+// ===== GRADUATE AUTO TO MANUAL MAP =====
+
+// Show graduate modal
+function showGraduateModal() {
+  if (currentMode !== 'auto') {
+    alert('Graduate is only available in Auto mode');
+    return;
+  }
+
+  const modal = document.getElementById('graduateModal');
+  const preview = document.getElementById('graduatePreview');
+
+  // Build working tree to count nodes
+  const workingTree = buildWorkingTree(DATA[currentCompany].root);
+  const nodeCount = countNodes(workingTree);
+  const overrideCount = Object.keys(overrides).length;
+  const fieldEditCount = Object.keys(fieldEdits).length;
+  const mergeCount = Object.keys(entityMerges).length;
+  const hasExistingManual = hasManualMap(currentCompany);
+
+  preview.innerHTML = `
+    <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; border: 1px solid #86efac;">
+      <div style="font-weight: 600; margin-bottom: 8px; color: #166534;">Preview for ${DATA[currentCompany]?.company || currentCompany}:</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px;">
+        <div><strong>${nodeCount}</strong> entities</div>
+        <div><strong>${overrideCount}</strong> reorganizations</div>
+        <div><strong>${fieldEditCount}</strong> field edits</div>
+        <div><strong>${mergeCount}</strong> merges</div>
+      </div>
+      ${hasExistingManual ? '<div style="margin-top: 8px; font-size: 12px; color: #b91c1c;">⚠️ Will replace existing Manual Map</div>' : ''}
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+}
+
+// Close graduate modal
+function closeGraduateModal() {
+  document.getElementById('graduateModal').style.display = 'none';
+}
+
+// Count nodes in tree
+function countNodes(node) {
+  let count = 1;
+  if (node.children) {
+    node.children.forEach(child => count += countNodes(child));
+  }
+  return count;
+}
+
+// Convert Auto tree node to Manual Map format
+function convertToManualMapNode(node, level = 0) {
+  // Apply field edits to get the current name
+  const displayName = getFieldValue(node, 'name');
+
+  // Get display size (respecting overrides)
+  const displaySize = getDisplaySize(node, currentCompany);
+
+  // Build gongEvidence with what we have
+  const gongEvidence = {
+    status: 'supported', // Graduated from Auto is considered supported
+    totalMentions: node.snippets?.length || 0,
+    matchedContacts: [],
+    matchedEntities: [],
+    sizeMentions: node.sizeMentions || [],
+    teamSizes: displaySize ? [displaySize] : (node.teamSize ? [node.teamSize] : []),
+    snippets: node.snippets || []
+  };
+
+  // Copy leader info if available
+  if (node.leader?.name) {
+    gongEvidence.matchedContacts.push({
+      name: node.leader.name,
+      title: node.leader.title || '',
+      isDecisionMaker: true
+    });
+  }
+
+  const manualNode = {
+    id: node.id,
+    name: displayName,
+    type: node.type || 'group',
+    level: level,
+    sites: node.sites || [],
+    notes: node.override ? `Moved from ${node.override.originalParent} on ${node.override.movedAt}` : '',
+    gongEvidence: gongEvidence,
+    children: []
+  };
+
+  // Recursively convert children
+  if (node.children && node.children.length > 0) {
+    manualNode.children = node.children.map(child => convertToManualMapNode(child, level + 1));
+  }
+
+  return manualNode;
+}
+
+// Perform the graduation
+async function performGraduation() {
+  const companyKey = currentCompany;
+  const companyName = DATA[companyKey]?.company || companyKey;
+
+  // Build working tree with all overrides applied
+  const workingTree = buildWorkingTree(DATA[companyKey].root);
+
+  // Convert to Manual Map format
+  const manualMapRoot = convertToManualMapNode(workingTree);
+
+  // Create the Manual Map entry
+  const manualMapEntry = {
+    company: companyName,
+    source: `Graduated from Auto on ${new Date().toISOString().split('T')[0]}`,
+    stats: {
+      totalNodes: countNodes(manualMapRoot),
+      supportedNodes: countNodes(manualMapRoot), // All are supported since from Auto
+      conflictingNodes: 0
+    },
+    root: manualMapRoot
+  };
+
+  // Store in MANUAL_DATA (in-memory for this session)
+  MANUAL_DATA[companyKey] = manualMapEntry;
+
+  // Save to localStorage for persistence
+  const graduatedMaps = JSON.parse(localStorage.getItem('graduatedMaps') || '{}');
+  graduatedMaps[companyKey] = manualMapEntry;
+  localStorage.setItem('graduatedMaps', JSON.stringify(graduatedMaps));
+
+  // Also save to KV for server-side persistence
+  try {
+    await fetch(`/api/graduated-map?account=${companyKey.toLowerCase()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ map: manualMapEntry })
+    });
+    console.log('[Graduate] Saved to KV');
+  } catch (e) {
+    console.log('[Graduate] KV save failed, using localStorage only');
+  }
+
+  closeGraduateModal();
+
+  // Switch to Manual Map mode to show the result
+  setMode('manual');
+
+  // Show success message
+  alert(`Successfully graduated ${companyName} to Manual Map!\n\n${countNodes(manualMapRoot)} entities converted.`);
+}
+
+// Load graduated maps from localStorage on init
+function loadGraduatedMaps() {
+  const stored = localStorage.getItem('graduatedMaps');
+  if (stored) {
+    const graduatedMaps = JSON.parse(stored);
+    Object.entries(graduatedMaps).forEach(([key, map]) => {
+      // Only load if no existing manual map or prefer graduated
+      if (!MANUAL_DATA[key] || MANUAL_DATA[key].source?.includes('Graduated')) {
+        MANUAL_DATA[key] = map;
+      }
+    });
+  }
+}
+
+// ===== END GRADUATE =====
+
 // Update duplicates badge count
 function updateDuplicatesBadge() {
   const count = getDuplicateCount();
@@ -77657,12 +77861,25 @@ function setMode(mode) {
   // Show/hide timeline and view toggle based on mode
   const timelineContainer = document.querySelector('.timeline-container');
   const viewToggle = document.querySelector('.view-toggle');
+  const graduateBtn = document.getElementById('graduateBtn');
+  const duplicatesBtn = document.getElementById('duplicatesBtn');
+
   if (mode === 'matchReview') {
     timelineContainer.style.display = 'none';
     viewToggle.style.display = 'none';
-  } else {
+    if (graduateBtn) graduateBtn.style.display = 'none';
+    if (duplicatesBtn) duplicatesBtn.style.display = 'none';
+  } else if (mode === 'manual') {
     timelineContainer.style.display = 'flex';
     viewToggle.style.display = 'flex';
+    if (graduateBtn) graduateBtn.style.display = 'none';
+    if (duplicatesBtn) duplicatesBtn.style.display = 'none';
+  } else {
+    // Auto mode
+    timelineContainer.style.display = 'flex';
+    viewToggle.style.display = 'flex';
+    if (graduateBtn) graduateBtn.style.display = 'inline-flex';
+    if (duplicatesBtn) duplicatesBtn.style.display = 'inline-flex';
   }
 
   // Re-render based on mode
@@ -78610,6 +78827,7 @@ loadMatchReviewState();
 loadFieldEdits();
 loadEntityMerges();
 loadManualMapOverrides();
+loadGraduatedMaps();
 
 // Update duplicates badge after load
 setTimeout(updateDuplicatesBadge, 100);
