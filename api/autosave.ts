@@ -8,6 +8,7 @@ interface AutosaveState {
   conflictResolutions: object;
   fieldEdits: object;
   entityMerges: object;
+  manualMapOverrides: object;
   mode: string;
   savedAt: string;
   user?: string;

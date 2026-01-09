@@ -75926,6 +75926,9 @@ let editingNodeId = null; // Currently being edited
 // Entity merges state: { canonicalId: { absorbed: [], aliases: [], mergedSnippets: [], mergedAt, user } }
 let entityMerges = {};
 
+// Manual Map overrides state: { nodeId: { originalParent, newParent, newParentName, movedAt } }
+let manualMapOverrides = {};
+
 // Get resolution key for a conflict
 function getResolutionKey(company, entityId, leaderName) {
   return `${company}:${entityId}:${leaderName}`.toLowerCase();
@@ -76211,6 +76214,146 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// Start editing a Manual Map node
+function startEditManualNode(nodeId, nodeEl) {
+  if (editingNodeId) cancelEditManualNode();
+  editingNodeId = nodeId;
+  nodeEl.classList.add('editing');
+
+  const node = findManualNodeById(MANUAL_DATA[currentCompany].root, nodeId);
+  if (!node) return;
+
+  const currentName = getFieldValue(node, 'name');
+
+  nodeEl.dataset.originalHtml = nodeEl.innerHTML;
+
+  const editForm = `
+    <div class="edit-form" style="text-align: left; padding: 8px;">
+      <label style="font-size: 10px; color: #666; display: block; margin-bottom: 2px;">Entity Name</label>
+      <input type="text" class="edit-field" id="edit-mm-name" value="${escapeHtml(currentName)}" placeholder="Entity name" onclick="event.stopPropagation()">
+      <div class="edit-actions" style="margin-top: 8px; display: flex; gap: 8px;">
+        <button class="edit-save-btn" onclick="event.stopPropagation(); saveEditManualNode('${nodeId}')" style="background: #4CAF50; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Save</button>
+        <button class="edit-cancel-btn" onclick="event.stopPropagation(); cancelEditManualNode()" style="background: #666; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  nodeEl.innerHTML = editForm;
+  document.getElementById('edit-mm-name').focus();
+}
+
+// Save Manual Map node edit
+function saveEditManualNode(nodeId) {
+  const node = findManualNodeById(MANUAL_DATA[currentCompany].root, nodeId);
+  if (!node) return;
+
+  const newName = document.getElementById('edit-mm-name').value.trim();
+  const originalName = node.name || '';
+
+  if (newName !== originalName) {
+    fieldEdits[nodeId] = {
+      ...fieldEdits[nodeId],
+      name: { original: originalName, edited: newName },
+      editedAt: new Date().toISOString()
+    };
+    localStorage.setItem('fieldEdits', JSON.stringify(fieldEdits));
+    saveFieldEditToKV(nodeId, fieldEdits[nodeId]);
+  }
+
+  editingNodeId = null;
+  renderManualMapView();
+}
+
+// Cancel Manual Map node edit
+function cancelEditManualNode() {
+  if (!editingNodeId) return;
+  editingNodeId = null;
+  renderManualMapView();
+}
+
+// Find node in Manual Map tree by ID
+function findManualNodeById(node, id) {
+  if (!node) return null;
+  if (node.id === id) return node;
+  if (node.children) {
+    for (const child of node.children) {
+      const found = findManualNodeById(child, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// ===== MANUAL MAP DRAG-DROP =====
+
+// Build working tree for Manual Map with overrides applied
+function buildManualMapWorkingTree(node, parent = null) {
+  const clone = { ...node, originalParent: parent?.id || null, children: [] };
+  const override = manualMapOverrides[node.id];
+  if (override) clone.override = override;
+
+  if (node.children) {
+    node.children.forEach(child => {
+      // Include child if no override OR if override keeps it under this parent
+      if (!manualMapOverrides[child.id] || manualMapOverrides[child.id].newParent === node.id) {
+        clone.children.push(buildManualMapWorkingTree(child, node));
+      }
+    });
+  }
+
+  // Add nodes that have been moved TO this node
+  Object.entries(manualMapOverrides).forEach(([nodeId, ov]) => {
+    if (ov.newParent === node.id && nodeId !== node.id) {
+      const movedNode = findManualNodeById(MANUAL_DATA[currentCompany].root, nodeId);
+      if (movedNode) {
+        const movedClone = buildManualMapWorkingTree(movedNode, node);
+        movedClone.override = ov;
+        clone.children.push(movedClone);
+      }
+    }
+  });
+
+  return clone;
+}
+
+// Check if childId is a descendant of parentId in Manual Map
+function isManualMapDescendant(parentId, childId, tree) {
+  const parent = findManualNodeById(tree, parentId);
+  if (!parent) return false;
+  function check(node) {
+    if (node.id === childId) return true;
+    return node.children?.some(check) || false;
+  }
+  return check(parent);
+}
+
+// Get original parent name for a Manual Map node
+function getManualMapOriginalParentName(nodeId) {
+  function findParent(node, targetId, parent = null) {
+    if (node.id === targetId) return parent;
+    if (node.children) {
+      for (const child of node.children) {
+        const found = findParent(child, targetId, node);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+  const parent = findParent(MANUAL_DATA[currentCompany].root, nodeId);
+  return parent?.name || 'root';
+}
+
+// Save Manual Map overrides to localStorage
+function saveManualMapOverrides() {
+  localStorage.setItem('manualMapOverrides', JSON.stringify(manualMapOverrides));
+}
+
+// Load Manual Map overrides from localStorage
+function loadManualMapOverrides() {
+  const stored = localStorage.getItem('manualMapOverrides');
+  if (stored) manualMapOverrides = JSON.parse(stored);
 }
 
 // ===== ENTITY MERGES (Duplicate Leader Handling) =====
@@ -77914,6 +78057,10 @@ function renderManualMapTree(node, level = 0) {
   nodeEl.dataset.status = status;
   nodeEl.dataset.nodeName = node.name;
 
+  // Enable drag for non-root nodes
+  if (manualMapOverrides[node.id]) nodeEl.classList.add('user-override');
+  nodeEl.draggable = level > 0;
+
   // Status indicator (colored dot)
   if (status !== 'unverified') {
     nodeEl.classList.add('has-changes');
@@ -77927,10 +78074,22 @@ function renderManualMapTree(node, level = 0) {
     nodeEl.appendChild(indicators);
   }
 
-  // Node name
+  // Node name (use edited value if available)
   const nameEl = document.createElement('div');
   nameEl.className = 'node-name';
-  nameEl.textContent = node.name;
+  nameEl.textContent = getFieldValue(node, 'name');
+
+  // Add edit pencil icon
+  const editBtn = document.createElement('span');
+  editBtn.className = 'edit-btn';
+  editBtn.innerHTML = '✎';
+  editBtn.title = 'Edit entity';
+  editBtn.style.cssText = 'cursor: pointer; margin-left: 6px; font-size: 11px; color: #8b7355;';
+  editBtn.onclick = (e) => {
+    e.stopPropagation();
+    startEditManualNode(node.id, nodeEl);
+  };
+  nameEl.appendChild(editBtn);
   nodeEl.appendChild(nameEl);
 
   // Leader from matched contacts
@@ -77974,6 +78133,52 @@ function renderManualMapTree(node, level = 0) {
     nodeEl.classList.add('selected');
     selectedManualNode = node;
     showManualNodeEvidence(node);
+  });
+
+  // Drag events for Manual Map
+  nodeEl.addEventListener('dragstart', (e) => {
+    draggedNodeId = node.id;
+    nodeEl.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  nodeEl.addEventListener('dragend', () => {
+    draggedNodeId = null;
+    nodeEl.classList.remove('dragging');
+    document.querySelectorAll('.drag-over, .drag-invalid').forEach(el => el.classList.remove('drag-over', 'drag-invalid'));
+  });
+
+  nodeEl.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (!draggedNodeId || draggedNodeId === node.id) return;
+    const workingTree = buildManualMapWorkingTree(MANUAL_DATA[currentCompany].root);
+    if (isManualMapDescendant(draggedNodeId, node.id, workingTree)) {
+      nodeEl.classList.add('drag-invalid');
+      nodeEl.classList.remove('drag-over');
+    } else {
+      nodeEl.classList.add('drag-over');
+      nodeEl.classList.remove('drag-invalid');
+    }
+  });
+
+  nodeEl.addEventListener('dragleave', () => nodeEl.classList.remove('drag-over', 'drag-invalid'));
+
+  nodeEl.addEventListener('drop', (e) => {
+    e.preventDefault();
+    nodeEl.classList.remove('drag-over', 'drag-invalid');
+    if (!draggedNodeId || draggedNodeId === node.id) return;
+    const workingTree = buildManualMapWorkingTree(MANUAL_DATA[currentCompany].root);
+    if (isManualMapDescendant(draggedNodeId, node.id, workingTree)) return;
+
+    const newOverride = {
+      originalParent: getManualMapOriginalParentName(draggedNodeId),
+      newParent: node.id,
+      newParentName: node.name,
+      movedAt: new Date().toISOString().split('T')[0]
+    };
+    manualMapOverrides[draggedNodeId] = newOverride;
+    saveManualMapOverrides();
+    renderManualMapView();
   });
 
   div.appendChild(nodeEl);
@@ -78287,8 +78492,9 @@ function renderManualMapView() {
 
   const root = manualData.root;
   if (root) {
-    // Render root node and its children
-    tree.appendChild(renderManualMapTree(root, 0));
+    // Build working tree with overrides applied
+    const workingRoot = buildManualMapWorkingTree(root);
+    tree.appendChild(renderManualMapTree(workingRoot, 0));
   }
 
   // Reset evidence panel
@@ -78403,6 +78609,7 @@ loadSizeOverrides();
 loadMatchReviewState();
 loadFieldEdits();
 loadEntityMerges();
+loadManualMapOverrides();
 
 // Update duplicates badge after load
 setTimeout(updateDuplicatesBadge, 100);
@@ -78771,6 +78978,7 @@ async function performAutosave() {
       conflictResolutions: conflictResolutions,
       fieldEdits: fieldEdits,
       entityMerges: entityMerges,
+      manualMapOverrides: manualMapOverrides,
       mode: currentMode
     };
 
@@ -78798,6 +79006,7 @@ window.addEventListener('beforeunload', () => {
     conflictResolutions: conflictResolutions,
     fieldEdits: fieldEdits,
     entityMerges: entityMerges,
+    manualMapOverrides: manualMapOverrides,
     mode: currentMode
   };
   navigator.sendBeacon(
