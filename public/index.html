@@ -1892,11 +1892,11 @@
     </div>
     
     <div class="header-controls">
-      <button class="reset-btn" id="duplicatesBtn" onclick="showDuplicatesModal()" style="background: #8b7355; position: relative;">
+      <button class="reset-btn" id="duplicatesBtn" onclick="showDuplicatesModal()" style="position: relative;">
         Duplicates
         <span id="duplicatesBadge" style="position: absolute; top: -6px; right: -6px; background: #c9302c; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; display: none;">0</span>
       </button>
-      <button class="reset-btn" id="graduateBtn" onclick="showGraduateModal()" style="background: #2563eb;" title="Convert this Auto map to a Manual Map">
+      <button class="reset-btn" id="graduateBtn" onclick="showGraduateModal()" title="Convert this Auto map to a Manual Map">
         Graduate ↗
       </button>
       <div class="view-toggle">
@@ -1904,6 +1904,9 @@
         <button id="tableViewBtn">Table</button>
       </div>
       <button class="reset-btn" id="resetAllBtn">Reset Overrides</button>
+      <button class="reset-btn" id="manageEntitiesBtn" onclick="showManageEntitiesModal()" title="Create or delete entities in Manual Map">
+        Manage Entities
+      </button>
     </div>
   </div>
 </header>
@@ -1990,6 +1993,86 @@
     </div>
     <div class="resolve-modal-footer">
       <button class="resolve-btn resolve-btn-cancel" onclick="closeEntityPickerModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Entities Modal -->
+<div class="resolve-modal" id="manageEntitiesModal" style="display: none;">
+  <div class="resolve-modal-content" style="max-width: 550px; max-height: 85vh;">
+    <div class="resolve-modal-header">
+      <h3>Manage Entities</h3>
+      <button class="changes-modal-close" onclick="closeManageEntitiesModal()">&times;</button>
+    </div>
+    <div class="resolve-modal-body" style="padding: 16px;">
+      <!-- Tab buttons -->
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #e0e0e0; padding-bottom: 12px;">
+        <button id="createEntityTab" class="reset-btn" style="flex: 1;" onclick="switchManageEntitiesTab('create')">Create Entity</button>
+        <button id="deleteEntityTab" class="reset-btn" style="flex: 1; opacity: 0.6;" onclick="switchManageEntitiesTab('delete')">Delete Entity</button>
+      </div>
+
+      <!-- Create Entity Form -->
+      <div id="createEntityPane">
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Create a new entity and add it to the Manual Map tree.</p>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Parent Entity *</label>
+          <input type="text" id="createEntityParentSearch" placeholder="Search for parent entity..."
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 4px;"
+                 oninput="filterCreateEntityParentList()">
+          <div id="createEntityParentList" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; display: none;">
+            <!-- Populated by JS -->
+          </div>
+          <div id="createEntitySelectedParent" style="padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 13px; display: none;">
+            <!-- Shows selected parent -->
+          </div>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Entity Name *</label>
+          <input type="text" id="createEntityName" placeholder="Enter entity name"
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Leader Name</label>
+          <input type="text" id="createEntityLeaderName" placeholder="Enter leader name (optional)"
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Leader Title</label>
+          <input type="text" id="createEntityLeaderTitle" placeholder="Enter leader title (optional)"
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+        </div>
+
+        <button class="resolve-btn resolve-btn-confirm" style="width: 100%;" onclick="createNewEntity()">Create Entity</button>
+      </div>
+
+      <!-- Delete Entity Form -->
+      <div id="deleteEntityPane" style="display: none;">
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Select an entity to delete from the Manual Map tree. This cannot be undone.</p>
+
+        <div style="margin-bottom: 12px;">
+          <input type="text" id="deleteEntitySearch" placeholder="Search for entity to delete..."
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
+                 oninput="filterDeleteEntityList()">
+        </div>
+        <div id="deleteEntityList" style="max-height: 300px; overflow-y: auto;">
+          <!-- Populated by JS -->
+        </div>
+
+        <div id="deleteEntityConfirm" style="display: none; margin-top: 16px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+          <p style="margin: 0 0 12px 0; font-size: 13px; color: #856404;">
+            Are you sure you want to delete <strong id="deleteEntityName"></strong>?
+            <span id="deleteEntityChildrenWarning" style="display: none; color: #c9302c;"><br>This will also delete all children!</span>
+          </p>
+          <div style="display: flex; gap: 8px;">
+            <button class="resolve-btn resolve-btn-cancel" onclick="cancelDeleteEntity()">Cancel</button>
+            <button class="resolve-btn" style="background: #c9302c; color: white;" onclick="confirmDeleteEntity()">Delete</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -76169,8 +76252,17 @@ function getFieldValue(node, fieldName) {
     return edit[fieldName].edited;
   }
   if (fieldName === 'name') return node.name || '';
-  if (fieldName === 'leaderName') return node.leader?.name || '';
-  if (fieldName === 'leaderTitle') return node.leader?.title || '';
+  // Check both Auto mode structure (node.leader) and Manual Map structure (gongEvidence.matchedContacts)
+  if (fieldName === 'leaderName') {
+    if (node.leader?.name) return node.leader.name;
+    const decisionMaker = node.gongEvidence?.matchedContacts?.find(c => c.isDecisionMaker);
+    return decisionMaker?.name || '';
+  }
+  if (fieldName === 'leaderTitle') {
+    if (node.leader?.title) return node.leader.title;
+    const decisionMaker = node.gongEvidence?.matchedContacts?.find(c => c.isDecisionMaker);
+    return decisionMaker?.title || '';
+  }
   return '';
 }
 
@@ -76288,6 +76380,8 @@ function startEditManualNode(nodeId, nodeEl) {
   if (!node) return;
 
   const currentName = getFieldValue(node, 'name');
+  const currentLeaderName = getFieldValue(node, 'leaderName');
+  const currentLeaderTitle = getFieldValue(node, 'leaderTitle');
 
   nodeEl.dataset.originalHtml = nodeEl.innerHTML;
 
@@ -76295,6 +76389,10 @@ function startEditManualNode(nodeId, nodeEl) {
     <div class="edit-form" style="text-align: left; padding: 8px;">
       <label style="font-size: 10px; color: #666; display: block; margin-bottom: 2px;">Entity Name</label>
       <input type="text" class="edit-field" id="edit-mm-name" value="${escapeHtml(currentName)}" placeholder="Entity name" onclick="event.stopPropagation()">
+      <label style="font-size: 10px; color: #666; display: block; margin-top: 8px; margin-bottom: 2px;">Leader Name</label>
+      <input type="text" class="edit-field" id="edit-mm-leaderName" value="${escapeHtml(currentLeaderName)}" placeholder="Leader name" onclick="event.stopPropagation()">
+      <label style="font-size: 10px; color: #666; display: block; margin-top: 8px; margin-bottom: 2px;">Leader Title</label>
+      <input type="text" class="edit-field" id="edit-mm-leaderTitle" value="${escapeHtml(currentLeaderTitle)}" placeholder="Leader title" onclick="event.stopPropagation()">
       <div class="edit-actions" style="margin-top: 8px; display: flex; gap: 8px;">
         <button class="edit-save-btn" onclick="event.stopPropagation(); saveEditManualNode('${nodeId}')" style="background: #4CAF50; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Save</button>
         <button class="edit-cancel-btn" onclick="event.stopPropagation(); cancelEditManualNode()" style="background: #666; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Cancel</button>
@@ -76312,12 +76410,35 @@ function saveEditManualNode(nodeId) {
   if (!node) return;
 
   const newName = document.getElementById('edit-mm-name').value.trim();
+  const newLeaderName = document.getElementById('edit-mm-leaderName').value.trim();
+  const newLeaderTitle = document.getElementById('edit-mm-leaderTitle').value.trim();
+
   const originalName = node.name || '';
+  // Manual Map nodes may have leader info in gongEvidence.matchedContacts or directly
+  const decisionMaker = node.gongEvidence?.matchedContacts?.find(c => c.isDecisionMaker);
+  const originalLeaderName = node.leader?.name || decisionMaker?.name || '';
+  const originalLeaderTitle = node.leader?.title || decisionMaker?.title || '';
+
+  const edit = {};
+  let hasChanges = false;
 
   if (newName !== originalName) {
+    edit.name = { original: originalName, edited: newName };
+    hasChanges = true;
+  }
+  if (newLeaderName !== originalLeaderName) {
+    edit.leaderName = { original: originalLeaderName, edited: newLeaderName };
+    hasChanges = true;
+  }
+  if (newLeaderTitle !== originalLeaderTitle) {
+    edit.leaderTitle = { original: originalLeaderTitle, edited: newLeaderTitle };
+    hasChanges = true;
+  }
+
+  if (hasChanges) {
     fieldEdits[nodeId] = {
       ...fieldEdits[nodeId],
-      name: { original: originalName, edited: newName },
+      ...edit,
       editedAt: new Date().toISOString()
     };
     localStorage.setItem('fieldEdits', JSON.stringify(fieldEdits));
@@ -78055,23 +78176,27 @@ function setMode(mode) {
   const viewToggle = document.querySelector('.view-toggle');
   const graduateBtn = document.getElementById('graduateBtn');
   const duplicatesBtn = document.getElementById('duplicatesBtn');
+  const manageEntitiesBtn = document.getElementById('manageEntitiesBtn');
 
   if (mode === 'matchReview') {
     timelineContainer.style.display = 'none';
     viewToggle.style.display = 'none';
     if (graduateBtn) graduateBtn.style.display = 'none';
     if (duplicatesBtn) duplicatesBtn.style.display = 'none';
+    if (manageEntitiesBtn) manageEntitiesBtn.style.display = 'none';
   } else if (mode === 'manual') {
     timelineContainer.style.display = 'flex';
     viewToggle.style.display = 'flex';
     if (graduateBtn) graduateBtn.style.display = 'none';
     if (duplicatesBtn) duplicatesBtn.style.display = 'none';
+    if (manageEntitiesBtn) manageEntitiesBtn.style.display = 'inline-flex';
   } else {
     // Auto mode
     timelineContainer.style.display = 'flex';
     viewToggle.style.display = 'flex';
     if (graduateBtn) graduateBtn.style.display = 'inline-flex';
     if (duplicatesBtn) duplicatesBtn.style.display = 'inline-flex';
+    if (manageEntitiesBtn) manageEntitiesBtn.style.display = 'none';
   }
 
   // Re-render based on mode
@@ -78286,6 +78411,292 @@ function closeEntityPickerModal() {
 }
 
 // ===== END ENTITY PICKER =====
+
+// ===== MANAGE ENTITIES MODAL =====
+
+let manageEntitiesState = {
+  selectedParentId: null,
+  selectedParentName: null,
+  selectedDeleteId: null,
+  selectedDeleteName: null,
+  selectedDeleteHasChildren: false,
+  allEntities: []
+};
+
+function showManageEntitiesModal() {
+  // Only works for Manual Map mode
+  if (!MANUAL_DATA[currentCompany]) {
+    alert('Manage Entities is only available in Manual Map mode. Please Graduate first or switch to a company with Manual Map data.');
+    return;
+  }
+
+  const modal = document.getElementById('manageEntitiesModal');
+  manageEntitiesState = {
+    selectedParentId: null,
+    selectedParentName: null,
+    selectedDeleteId: null,
+    selectedDeleteName: null,
+    selectedDeleteHasChildren: false,
+    allEntities: []
+  };
+
+  // Build flat list of all entities
+  manageEntitiesState.allEntities = [];
+  const root = MANUAL_DATA[currentCompany].root || MANUAL_DATA[currentCompany];
+  buildEntityList(root, '', manageEntitiesState.allEntities);
+
+  // Reset form fields
+  document.getElementById('createEntityParentSearch').value = '';
+  document.getElementById('createEntityName').value = '';
+  document.getElementById('createEntityLeaderName').value = '';
+  document.getElementById('createEntityLeaderTitle').value = '';
+  document.getElementById('createEntityParentList').style.display = 'none';
+  document.getElementById('createEntitySelectedParent').style.display = 'none';
+  document.getElementById('deleteEntitySearch').value = '';
+  document.getElementById('deleteEntityConfirm').style.display = 'none';
+
+  // Start on Create tab
+  switchManageEntitiesTab('create');
+
+  modal.style.display = 'flex';
+}
+
+function buildEntityList(node, path, list) {
+  if (!node) return;
+  const nodeName = getFieldValue(node, 'name');
+  const fullPath = path ? `${path} > ${nodeName}` : nodeName;
+  list.push({
+    id: node.id,
+    name: nodeName,
+    path: fullPath,
+    hasChildren: (node.children?.length || 0) > 0
+  });
+  if (node.children) {
+    for (const child of node.children) {
+      buildEntityList(child, fullPath, list);
+    }
+  }
+}
+
+function closeManageEntitiesModal() {
+  document.getElementById('manageEntitiesModal').style.display = 'none';
+}
+
+function switchManageEntitiesTab(tab) {
+  const createTab = document.getElementById('createEntityTab');
+  const deleteTab = document.getElementById('deleteEntityTab');
+  const createPane = document.getElementById('createEntityPane');
+  const deletePane = document.getElementById('deleteEntityPane');
+
+  if (tab === 'create') {
+    createTab.style.opacity = '1';
+    deleteTab.style.opacity = '0.6';
+    createPane.style.display = 'block';
+    deletePane.style.display = 'none';
+  } else {
+    createTab.style.opacity = '0.6';
+    deleteTab.style.opacity = '1';
+    createPane.style.display = 'none';
+    deletePane.style.display = 'block';
+    renderDeleteEntityList(manageEntitiesState.allEntities);
+  }
+}
+
+// === CREATE ENTITY FUNCTIONS ===
+
+function filterCreateEntityParentList() {
+  const search = document.getElementById('createEntityParentSearch').value.toLowerCase().trim();
+  const listEl = document.getElementById('createEntityParentList');
+
+  if (!search) {
+    listEl.style.display = 'none';
+    return;
+  }
+
+  const filtered = manageEntitiesState.allEntities.filter(e =>
+    e.name.toLowerCase().includes(search) || e.path.toLowerCase().includes(search)
+  );
+
+  listEl.innerHTML = '';
+  if (filtered.length === 0) {
+    listEl.innerHTML = '<div style="padding: 12px; color: #666; font-size: 13px;">No matching entities</div>';
+  } else {
+    filtered.slice(0, 20).forEach(entity => {
+      const item = document.createElement('div');
+      item.style.cssText = 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 13px;';
+      item.innerHTML = `<div style="font-weight: 500;">${entity.name}</div><div style="font-size: 11px; color: #888;">${entity.path}</div>`;
+      item.onclick = () => selectCreateEntityParent(entity);
+      item.onmouseover = () => item.style.background = '#f5f5f5';
+      item.onmouseout = () => item.style.background = 'transparent';
+      listEl.appendChild(item);
+    });
+  }
+  listEl.style.display = 'block';
+}
+
+function selectCreateEntityParent(entity) {
+  manageEntitiesState.selectedParentId = entity.id;
+  manageEntitiesState.selectedParentName = entity.name;
+
+  document.getElementById('createEntityParentList').style.display = 'none';
+  document.getElementById('createEntityParentSearch').value = '';
+
+  const selectedEl = document.getElementById('createEntitySelectedParent');
+  selectedEl.innerHTML = `<strong>Selected:</strong> ${entity.path} <span style="cursor: pointer; color: #c9302c; margin-left: 8px;" onclick="clearCreateEntityParent()">×</span>`;
+  selectedEl.style.display = 'block';
+}
+
+function clearCreateEntityParent() {
+  manageEntitiesState.selectedParentId = null;
+  manageEntitiesState.selectedParentName = null;
+  document.getElementById('createEntitySelectedParent').style.display = 'none';
+}
+
+function createNewEntity() {
+  const parentId = manageEntitiesState.selectedParentId;
+  const name = document.getElementById('createEntityName').value.trim();
+  const leaderName = document.getElementById('createEntityLeaderName').value.trim();
+  const leaderTitle = document.getElementById('createEntityLeaderTitle').value.trim();
+
+  if (!parentId) {
+    alert('Please select a parent entity');
+    return;
+  }
+  if (!name) {
+    alert('Please enter an entity name');
+    return;
+  }
+
+  const root = MANUAL_DATA[currentCompany].root || MANUAL_DATA[currentCompany];
+  const parentNode = findManualNodeById(root, parentId);
+  if (!parentNode) {
+    alert('Parent entity not found');
+    return;
+  }
+
+  const newId = `manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const newNode = {
+    id: newId,
+    name: name,
+    type: 'group',
+    level: (parentNode.level || 0) + 1,
+    gongEvidence: {
+      status: 'unverified',
+      totalMentions: 0,
+      teamSizes: [],
+      sizeMentions: [],
+      matchedContacts: leaderName ? [{
+        name: leaderName,
+        title: leaderTitle || '',
+        isDecisionMaker: true
+      }] : []
+    },
+    children: []
+  };
+
+  if (!parentNode.children) parentNode.children = [];
+  parentNode.children.push(newNode);
+
+  // Save changes
+  saveManualMapModifications();
+
+  // Close modal and re-render
+  closeManageEntitiesModal();
+  renderManualMapView();
+}
+
+// === DELETE ENTITY FUNCTIONS ===
+
+function renderDeleteEntityList(entities) {
+  const listEl = document.getElementById('deleteEntityList');
+  listEl.innerHTML = '';
+
+  // Filter out root node (can't delete)
+  const root = MANUAL_DATA[currentCompany].root || MANUAL_DATA[currentCompany];
+  const deletable = entities.filter(e => e.id !== root.id);
+
+  if (deletable.length === 0) {
+    listEl.innerHTML = '<div style="padding: 12px; color: #666; font-size: 13px;">No entities available to delete</div>';
+    return;
+  }
+
+  deletable.forEach(entity => {
+    const item = document.createElement('div');
+    item.style.cssText = 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 13px; display: flex; justify-content: space-between; align-items: center;';
+    item.innerHTML = `
+      <div>
+        <div style="font-weight: 500;">${entity.name}</div>
+        <div style="font-size: 11px; color: #888;">${entity.path}</div>
+      </div>
+      <button class="resolve-btn" style="background: #c9302c; color: white; font-size: 11px; padding: 4px 8px;" onclick="event.stopPropagation(); selectDeleteEntity('${entity.id}', '${escapeHtml(entity.name)}', ${entity.hasChildren})">Delete</button>
+    `;
+    item.onmouseover = () => item.style.background = '#fff3cd';
+    item.onmouseout = () => item.style.background = 'transparent';
+    listEl.appendChild(item);
+  });
+}
+
+function filterDeleteEntityList() {
+  const search = document.getElementById('deleteEntitySearch').value.toLowerCase().trim();
+
+  if (!search) {
+    renderDeleteEntityList(manageEntitiesState.allEntities);
+    return;
+  }
+
+  const filtered = manageEntitiesState.allEntities.filter(e =>
+    e.name.toLowerCase().includes(search) || e.path.toLowerCase().includes(search)
+  );
+
+  renderDeleteEntityList(filtered);
+}
+
+function selectDeleteEntity(id, name, hasChildren) {
+  manageEntitiesState.selectedDeleteId = id;
+  manageEntitiesState.selectedDeleteName = name;
+  manageEntitiesState.selectedDeleteHasChildren = hasChildren;
+
+  document.getElementById('deleteEntityName').textContent = name;
+  document.getElementById('deleteEntityChildrenWarning').style.display = hasChildren ? 'inline' : 'none';
+  document.getElementById('deleteEntityConfirm').style.display = 'block';
+}
+
+function cancelDeleteEntity() {
+  manageEntitiesState.selectedDeleteId = null;
+  manageEntitiesState.selectedDeleteName = null;
+  manageEntitiesState.selectedDeleteHasChildren = false;
+  document.getElementById('deleteEntityConfirm').style.display = 'none';
+}
+
+function confirmDeleteEntity() {
+  const nodeId = manageEntitiesState.selectedDeleteId;
+  if (!nodeId) return;
+
+  const root = MANUAL_DATA[currentCompany].root || MANUAL_DATA[currentCompany];
+
+  // Can't delete root
+  if (nodeId === root.id) {
+    alert('Cannot delete the root entity');
+    return;
+  }
+
+  const parent = findManualNodeParent(root, nodeId);
+  if (!parent) {
+    alert('Could not find parent of entity');
+    return;
+  }
+
+  parent.children = parent.children.filter(child => child.id !== nodeId);
+
+  // Save changes
+  saveManualMapModifications();
+
+  // Close modal and re-render
+  closeManageEntitiesModal();
+  renderManualMapView();
+}
+
+// ===== END MANAGE ENTITIES MODAL =====
 
 // Truncate snippet text
 function mrTruncateSnippet(text, maxLength = 150) {
@@ -78526,13 +78937,13 @@ function renderMatchReview(company) {
                 <button class="mr-btn mr-btn-approve" onclick="approveMatch('${targetCompany}', '${item.id}', '${(suggestion.manual_node_name || '').replace(/'/g, "\\'")}', '${(suggestion.manual_node_path || '').replace(/'/g, "\\'")}')">Approve</button>
                 <button class="mr-btn mr-btn-reject" onclick="rejectMatch('${targetCompany}', '${item.id}')">Reject</button>
               ` : ''}
-              <button class="mr-btn" onclick="showEntityPickerModal('${targetCompany}', '${item.id}')" style="background: #8b7355;" title="Pick a different entity">Pick</button>
+              <button class="mr-btn" onclick="showEntityPickerModal('${targetCompany}', '${item.id}')" title="Pick a different entity" style="margin-top: 4px;">Pick Entity</button>
             </div>
           ` : `
             <div class="mr-actions">
               <span class="mr-status-badge ${status}">${status}</span>
-              <button class="mr-btn" onclick="showEntityPickerModal('${targetCompany}', '${item.id}')" style="background: #8b7355;" title="Change entity">Pick</button>
               <button class="mr-btn" onclick="resetMatchItem('${targetCompany}', '${item.id}')">Reset</button>
+              <button class="mr-btn" onclick="showEntityPickerModal('${targetCompany}', '${item.id}')" title="Change entity" style="margin-top: 4px;">Pick Entity</button>
             </div>
           `}
         </td>
@@ -78580,22 +78991,22 @@ function renderManualMapTree(node, level = 0) {
     nodeEl.appendChild(indicators);
   }
 
-  // Node name (use edited value if available)
-  const nameEl = document.createElement('div');
-  nameEl.className = 'node-name';
-  nameEl.textContent = getFieldValue(node, 'name');
-
-  // Add edit pencil icon
+  // Add edit pencil icon at top-left
   const editBtn = document.createElement('span');
   editBtn.className = 'edit-btn';
   editBtn.innerHTML = '✎';
   editBtn.title = 'Edit entity';
-  editBtn.style.cssText = 'cursor: pointer; margin-left: 6px; font-size: 11px; color: #8b7355;';
+  editBtn.style.cssText = 'cursor: pointer; font-size: 11px; color: #8b7355; position: absolute; top: 2px; left: 2px;';
   editBtn.onclick = (e) => {
     e.stopPropagation();
     startEditManualNode(node.id, nodeEl);
   };
-  nameEl.appendChild(editBtn);
+  nodeEl.appendChild(editBtn);
+
+  // Node name (use edited value if available)
+  const nameEl = document.createElement('div');
+  nameEl.className = 'node-name';
+  nameEl.textContent = getFieldValue(node, 'name');
   nodeEl.appendChild(nameEl);
 
   // Leader from matched contacts
