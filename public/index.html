@@ -76616,8 +76616,8 @@ function deleteManualMapNode(nodeId) {
   renderManualMapView();
 }
 
-// Save Manual Map modifications to localStorage
-function saveManualMapModifications() {
+// Save Manual Map modifications to localStorage AND KV
+async function saveManualMapModifications() {
   localStorage.setItem('manualMapModifications', JSON.stringify(manualMapModifications));
 
   // Also save the updated MANUAL_DATA for graduated maps
@@ -76625,6 +76625,18 @@ function saveManualMapModifications() {
   if (graduatedMaps[currentCompany]) {
     graduatedMaps[currentCompany] = MANUAL_DATA[currentCompany];
     localStorage.setItem('graduatedMaps', JSON.stringify(graduatedMaps));
+
+    // Sync to KV for cross-browser persistence
+    try {
+      await fetch(`/api/graduated-map?account=${currentCompany.toLowerCase()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ map: MANUAL_DATA[currentCompany] })
+      });
+      console.log('[ManualMap] Synced entity changes to KV');
+    } catch (e) {
+      console.warn('[ManualMap] Failed to sync to KV:', e.message);
+    }
   }
 }
 
@@ -79940,6 +79952,17 @@ async function performAutosave() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ state })
     });
+
+    // Also save graduated map data if it exists
+    const graduatedMaps = JSON.parse(localStorage.getItem('graduatedMaps') || '{}');
+    if (graduatedMaps[currentCompany] && MANUAL_DATA[currentCompany]) {
+      await fetch(`/api/graduated-map?account=${currentCompany.toLowerCase()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ map: MANUAL_DATA[currentCompany] })
+      });
+    }
+
     console.log('[Autosave] State saved to KV at', new Date().toISOString());
   } catch (e) {
     console.log('[Autosave] Failed (will retry):', e.message);
@@ -79966,6 +79989,15 @@ window.addEventListener('beforeunload', () => {
     `/api/autosave?account=${currentCompany.toLowerCase()}`,
     JSON.stringify({ state })
   );
+
+  // Also save graduated map data if it exists
+  const graduatedMaps = JSON.parse(localStorage.getItem('graduatedMaps') || '{}');
+  if (graduatedMaps[currentCompany] && MANUAL_DATA[currentCompany]) {
+    navigator.sendBeacon(
+      `/api/graduated-map?account=${currentCompany.toLowerCase()}`,
+      JSON.stringify({ map: MANUAL_DATA[currentCompany] })
+    );
+  }
 });
 
 console.log('[Init] Autosave enabled (every 5 minutes)');
