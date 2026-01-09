@@ -1261,6 +1261,66 @@
       color: #3b5998;
     }
 
+    .node.user-edited {
+      border-left: 2px solid #ff9800;
+      padding-left: 6px;
+    }
+
+    .node.user-edited::after {
+      content: '✎';
+      position: absolute;
+      right: -10px;
+      top: 4px;
+      font-size: 10px;
+      color: #ff9800;
+    }
+
+    .node.editing {
+      background: #fff3e0;
+      min-width: 200px;
+    }
+
+    .edit-field {
+      width: 100%;
+      padding: 4px 8px;
+      margin-bottom: 4px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .edit-field:focus {
+      outline: none;
+      border-color: #ff9800;
+    }
+
+    .edit-btn {
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .node:hover .edit-btn {
+      opacity: 0.7;
+    }
+
+    .edit-btn:hover {
+      opacity: 1 !important;
+    }
+
+    .merge-group {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .merge-group-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
     .node.has-changes {
       position: relative;
     }
@@ -1832,6 +1892,10 @@
     </div>
     
     <div class="header-controls">
+      <button class="reset-btn" id="duplicatesBtn" onclick="showDuplicatesModal()" style="background: #ff9800; position: relative;">
+        Duplicates
+        <span id="duplicatesBadge" style="position: absolute; top: -6px; right: -6px; background: #f44336; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; display: none;">0</span>
+      </button>
       <div class="view-toggle">
         <button id="treeViewBtn" class="active">Tree</button>
         <button id="tableViewBtn">Table</button>
@@ -1884,6 +1948,22 @@
     <div class="resolve-modal-footer">
       <button class="resolve-btn resolve-btn-cancel" id="resolveCancel">Cancel</button>
       <button class="resolve-btn resolve-btn-save" id="resolveSave" disabled>Save Resolution</button>
+    </div>
+  </div>
+</div>
+
+<!-- Duplicates Modal -->
+<div class="resolve-modal" id="duplicatesModal" style="display: none;">
+  <div class="resolve-modal-content" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
+    <div class="resolve-modal-header">
+      <h3>Duplicate Leaders</h3>
+      <button class="changes-modal-close" onclick="closeDuplicatesModal()">&times;</button>
+    </div>
+    <div class="resolve-modal-body" id="duplicatesModalBody">
+      <!-- Populated by JS -->
+    </div>
+    <div class="resolve-modal-footer">
+      <button class="resolve-btn resolve-btn-cancel" onclick="closeDuplicatesModal()">Close</button>
     </div>
   </div>
 </div>
@@ -75839,6 +75919,13 @@ let selectedManualNode = null;
 // Conflict resolution state (must be before renderTree uses it)
 let conflictResolutions = {};
 
+// Field edits state: { entityId: { name?: {original, edited}, leaderName?: {original, edited}, leaderTitle?: {original, edited} } }
+let fieldEdits = {};
+let editingNodeId = null; // Currently being edited
+
+// Entity merges state: { canonicalId: { absorbed: [], aliases: [], mergedSnippets: [], mergedAt, user } }
+let entityMerges = {};
+
 // Get resolution key for a conflict
 function getResolutionKey(company, entityId, leaderName) {
   return `${company}:${entityId}:${leaderName}`.toLowerCase();
@@ -75849,31 +75936,68 @@ function getSizeOverrideKey(company, nodeId) {
   return `${company}:${nodeId}`.toLowerCase();
 }
 
-// Load overrides
-function loadOverrides() {
+// Load overrides from localStorage and Vercel KV
+async function loadOverrides(rerender = false) {
+  // Load localStorage first as cache
   const stored = localStorage.getItem('orgChartOverrides');
   if (stored) overrides = JSON.parse(stored);
+
+  // Then try to fetch from Vercel KV and merge (KV takes precedence)
+  try {
+    const response = await fetch(`/api/corrections?account=${currentCompany.toLowerCase()}`);
+    if (response.ok) {
+      const kvData = await response.json();
+      if (kvData && Object.keys(kvData).length > 0) {
+        const hadChanges = JSON.stringify(overrides) !== JSON.stringify({ ...overrides, ...kvData });
+        overrides = { ...overrides, ...kvData };
+        localStorage.setItem('orgChartOverrides', JSON.stringify(overrides));
+        // Re-render if KV had new data
+        if (hadChanges && rerender) {
+          renderCompany(currentCompany);
+        }
+      }
+    }
+  } catch (e) {
+    console.log('Using localStorage for overrides (KV not available)');
+  }
 }
 
-// Load size overrides from localStorage (and optionally from Vercel KV)
-function loadSizeOverrides() {
+// Load size overrides from localStorage and Vercel KV
+async function loadSizeOverrides() {
   const stored = localStorage.getItem('sizeOverrides');
   if (stored) sizeOverrides = JSON.parse(stored);
 
-  // TODO: Fetch from Vercel KV and merge
-  // fetch('/api/size-overrides')
-  //   .then(r => r.json())
-  //   .then(remote => { sizeOverrides = { ...sizeOverrides, ...remote }; })
-  //   .catch(() => {}); // Silent fail to local
+  // Fetch from Vercel KV and merge (KV takes precedence)
+  try {
+    const response = await fetch(`/api/sizes?account=${currentCompany.toLowerCase()}`);
+    if (response.ok) {
+      const kvData = await response.json();
+      if (kvData && Object.keys(kvData).length > 0) {
+        sizeOverrides = { ...sizeOverrides, ...kvData };
+        localStorage.setItem('sizeOverrides', JSON.stringify(sizeOverrides));
+      }
+    }
+  } catch (e) {
+    console.log('Using localStorage for size overrides (KV not available)');
+  }
 }
 
-// Save size overrides to localStorage (and optionally to Vercel KV)
+// Save size overrides to localStorage and Vercel KV
 function saveSizeOverrides() {
   localStorage.setItem('sizeOverrides', JSON.stringify(sizeOverrides));
+}
 
-  // TODO: POST to Vercel KV
-  // fetch('/api/size-overrides', { method: 'POST', body: JSON.stringify(sizeOverrides) })
-  //   .catch(() => {}); // Silent fail
+// Save single size override to Vercel KV
+async function saveSizeOverrideToKV(key, override) {
+  try {
+    await fetch(`/api/sizes?account=${currentCompany.toLowerCase()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, override })
+    });
+  } catch (e) {
+    console.log('Size override saved locally (KV sync pending)');
+  }
 }
 
 // Get display size for a node (respects overrides)
@@ -75895,12 +76019,14 @@ function getDisplaySize(node, company) {
 // Set size override
 function setSizeOverride(company, nodeId, selectedIndex, customValue = null) {
   const key = getSizeOverrideKey(company, nodeId);
-  sizeOverrides[key] = {
+  const override = {
     selectedSizeIndex: selectedIndex,
     customValue: customValue,
     updatedAt: new Date().toISOString()
   };
+  sizeOverrides[key] = override;
   saveSizeOverrides();
+  saveSizeOverrideToKV(key, override); // Sync to Vercel KV
 }
 
 // Clear size override (uses currentCompany if company not specified)
@@ -75908,7 +76034,436 @@ function clearSizeOverride(nodeId, company = null) {
   const key = getSizeOverrideKey(company || currentCompany, nodeId);
   delete sizeOverrides[key];
   saveSizeOverrides();
+  deleteSizeOverrideFromKV(key); // Sync deletion to Vercel KV
 }
+
+// Delete size override from Vercel KV
+async function deleteSizeOverrideFromKV(key) {
+  try {
+    await fetch(`/api/sizes?account=${currentCompany.toLowerCase()}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    });
+  } catch (e) {
+    console.log('Size override deleted locally (KV sync pending)');
+  }
+}
+
+// ===== FIELD EDITS (Inline Entity Editing) =====
+
+// Load field edits from localStorage and Vercel KV
+async function loadFieldEdits() {
+  const stored = localStorage.getItem('fieldEdits');
+  if (stored) fieldEdits = JSON.parse(stored);
+
+  try {
+    const response = await fetch(`/api/field-edits?account=${currentCompany.toLowerCase()}`);
+    if (response.ok) {
+      const kvData = await response.json();
+      if (kvData && Object.keys(kvData).length > 0) {
+        fieldEdits = { ...fieldEdits, ...kvData };
+        localStorage.setItem('fieldEdits', JSON.stringify(fieldEdits));
+      }
+    }
+  } catch (e) {
+    console.log('Using localStorage for field edits (KV not available)');
+  }
+}
+
+// Save field edit to Vercel KV
+async function saveFieldEditToKV(entityId, edit) {
+  try {
+    await fetch(`/api/field-edits?account=${currentCompany.toLowerCase()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityId, edit })
+    });
+  } catch (e) {
+    console.log('Field edit saved locally (KV sync pending)');
+  }
+}
+
+// Delete field edit from Vercel KV
+async function deleteFieldEditFromKV(entityId) {
+  try {
+    await fetch(`/api/field-edits?account=${currentCompany.toLowerCase()}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityId })
+    });
+  } catch (e) {
+    console.log('Field edit deleted locally (KV sync pending)');
+  }
+}
+
+// Get edited value for a field, or original if not edited
+function getFieldValue(node, fieldName) {
+  const edit = fieldEdits[node.id];
+  if (edit && edit[fieldName]?.edited !== undefined) {
+    return edit[fieldName].edited;
+  }
+  if (fieldName === 'name') return node.name || '';
+  if (fieldName === 'leaderName') return node.leader?.name || '';
+  if (fieldName === 'leaderTitle') return node.leader?.title || '';
+  return '';
+}
+
+// Start editing a node
+function startEdit(nodeId, nodeEl) {
+  if (editingNodeId) cancelEdit();
+  editingNodeId = nodeId;
+  nodeEl.classList.add('editing');
+
+  const node = findNodeById(DATA[currentCompany].root, nodeId);
+  if (!node) return;
+
+  const currentName = getFieldValue(node, 'name');
+  const currentLeaderName = getFieldValue(node, 'leaderName');
+  const currentLeaderTitle = getFieldValue(node, 'leaderTitle');
+
+  nodeEl.dataset.originalHtml = nodeEl.innerHTML;
+
+  const editForm = `
+    <div class="edit-form" style="text-align: left; padding: 8px;">
+      <label style="font-size: 10px; color: #666; display: block; margin-bottom: 2px;">Entity Name</label>
+      <input type="text" class="edit-field" id="edit-name" value="${escapeHtml(currentName)}" placeholder="Entity name" onclick="event.stopPropagation()">
+      <label style="font-size: 10px; color: #666; display: block; margin-top: 8px; margin-bottom: 2px;">Leader Name</label>
+      <input type="text" class="edit-field" id="edit-leaderName" value="${escapeHtml(currentLeaderName)}" placeholder="Leader name" onclick="event.stopPropagation()">
+      <label style="font-size: 10px; color: #666; display: block; margin-top: 8px; margin-bottom: 2px;">Leader Title</label>
+      <input type="text" class="edit-field" id="edit-leaderTitle" value="${escapeHtml(currentLeaderTitle)}" placeholder="Leader title" onclick="event.stopPropagation()">
+      <div class="edit-actions" style="margin-top: 8px; display: flex; gap: 8px;">
+        <button class="edit-save-btn" onclick="event.stopPropagation(); saveEdit('${nodeId}')" style="background: #4CAF50; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Save</button>
+        <button class="edit-cancel-btn" onclick="event.stopPropagation(); cancelEdit()" style="background: #666; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  nodeEl.innerHTML = editForm;
+  document.getElementById('edit-name').focus();
+}
+
+// Save field edits
+function saveEdit(nodeId) {
+  const node = findNodeById(DATA[currentCompany].root, nodeId);
+  if (!node) return;
+
+  const newName = document.getElementById('edit-name').value.trim();
+  const newLeaderName = document.getElementById('edit-leaderName').value.trim();
+  const newLeaderTitle = document.getElementById('edit-leaderTitle').value.trim();
+
+  const originalName = node.name || '';
+  const originalLeaderName = node.leader?.name || '';
+  const originalLeaderTitle = node.leader?.title || '';
+
+  const edit = {};
+  let hasChanges = false;
+
+  if (newName !== originalName) {
+    edit.name = { original: originalName, edited: newName };
+    hasChanges = true;
+  }
+  if (newLeaderName !== originalLeaderName) {
+    edit.leaderName = { original: originalLeaderName, edited: newLeaderName };
+    hasChanges = true;
+  }
+  if (newLeaderTitle !== originalLeaderTitle) {
+    edit.leaderTitle = { original: originalLeaderTitle, edited: newLeaderTitle };
+    hasChanges = true;
+  }
+
+  if (hasChanges) {
+    fieldEdits[nodeId] = {
+      ...fieldEdits[nodeId],
+      ...edit,
+      editedAt: new Date().toISOString()
+    };
+    localStorage.setItem('fieldEdits', JSON.stringify(fieldEdits));
+    saveFieldEditToKV(nodeId, fieldEdits[nodeId]);
+  }
+
+  editingNodeId = null;
+  renderCompany(currentCompany);
+}
+
+// Cancel editing
+function cancelEdit() {
+  if (!editingNodeId) return;
+  const nodeEl = document.querySelector(`.node[data-id="${editingNodeId}"]`);
+  if (nodeEl && nodeEl.dataset.originalHtml) {
+    nodeEl.innerHTML = nodeEl.dataset.originalHtml;
+    nodeEl.classList.remove('editing');
+  }
+  editingNodeId = null;
+  renderCompany(currentCompany);
+}
+
+// Clear field edit for an entity
+function clearFieldEdit(nodeId) {
+  delete fieldEdits[nodeId];
+  localStorage.setItem('fieldEdits', JSON.stringify(fieldEdits));
+  deleteFieldEditFromKV(nodeId);
+  renderCompany(currentCompany);
+}
+
+// Escape HTML for safe insertion
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ===== ENTITY MERGES (Duplicate Leader Handling) =====
+
+// Load entity merges from localStorage and Vercel KV
+async function loadEntityMerges() {
+  const stored = localStorage.getItem('entityMerges');
+  if (stored) entityMerges = JSON.parse(stored);
+
+  try {
+    const response = await fetch(`/api/merges?account=${currentCompany.toLowerCase()}`);
+    if (response.ok) {
+      const kvData = await response.json();
+      if (kvData && Object.keys(kvData).length > 0) {
+        entityMerges = { ...entityMerges, ...kvData };
+        localStorage.setItem('entityMerges', JSON.stringify(entityMerges));
+      }
+    }
+  } catch (e) {
+    console.log('Using localStorage for entity merges (KV not available)');
+  }
+}
+
+// Save entity merge to Vercel KV
+async function saveEntityMergeToKV(canonicalId, merge) {
+  try {
+    await fetch(`/api/merges?account=${currentCompany.toLowerCase()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ canonicalId, merge })
+    });
+  } catch (e) {
+    console.log('Entity merge saved locally (KV sync pending)');
+  }
+}
+
+// Delete entity merge from Vercel KV
+async function deleteEntityMergeFromKV(canonicalId) {
+  try {
+    await fetch(`/api/merges?account=${currentCompany.toLowerCase()}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ canonicalId })
+    });
+  } catch (e) {
+    console.log('Entity merge deleted locally (KV sync pending)');
+  }
+}
+
+// Collect all nodes from tree into flat array
+function collectAllNodes(node, result = []) {
+  if (!node) return result;
+  result.push(node);
+  if (node.children) {
+    node.children.forEach(child => collectAllNodes(child, result));
+  }
+  return result;
+}
+
+// Check if entity has been absorbed by another
+function isEntityAbsorbed(entityId) {
+  for (const [canonicalId, merge] of Object.entries(entityMerges)) {
+    if (merge.absorbed && merge.absorbed.includes(entityId)) {
+      return canonicalId;
+    }
+  }
+  return null;
+}
+
+// Find duplicate leaders (same name appearing on multiple entities)
+function findDuplicateLeaders() {
+  const data = DATA[currentCompany];
+  if (!data?.root) return [];
+
+  const allNodes = collectAllNodes(data.root);
+  const leaderMap = {}; // { leaderName: [nodes] }
+
+  allNodes.forEach(node => {
+    if (isEntityAbsorbed(node.id)) return;
+    const leaderName = getFieldValue(node, 'leaderName').trim();
+    if (leaderName && leaderName !== '(no leader)' && leaderName !== '?, ?') {
+      if (!leaderMap[leaderName]) {
+        leaderMap[leaderName] = [];
+      }
+      leaderMap[leaderName].push(node);
+    }
+  });
+
+  const duplicates = [];
+  for (const [name, nodes] of Object.entries(leaderMap)) {
+    if (nodes.length >= 2) {
+      const validKey = `validDuplicate:${currentCompany}:${name}`;
+      if (!localStorage.getItem(validKey)) {
+        duplicates.push({ leaderName: name, entities: nodes });
+      }
+    }
+  }
+
+  return duplicates.sort((a, b) => b.entities.length - a.entities.length);
+}
+
+// Get count of duplicate leader groups
+function getDuplicateCount() {
+  return findDuplicateLeaders().length;
+}
+
+// Show duplicates modal
+let mergeSelections = {}; // { groupIdx: { canonical: entityId, toMerge: [entityIds] } }
+
+function showDuplicatesModal() {
+  const duplicates = findDuplicateLeaders();
+  const modal = document.getElementById('duplicatesModal');
+  const body = document.getElementById('duplicatesModalBody');
+
+  if (duplicates.length === 0) {
+    body.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;">No duplicate leaders found.</div>';
+  } else {
+    body.innerHTML = duplicates.map((dup, groupIdx) => {
+      const snippetCounts = dup.entities.map(n => (n.snippets?.length || 0));
+      const totalSnippets = snippetCounts.reduce((a, b) => a + b, 0);
+
+      return `
+        <div class="merge-group" data-group="${groupIdx}">
+          <div class="merge-group-header">
+            <span><strong>${dup.leaderName}</strong></span>
+            <span style="color: #666; font-size: 12px;">${dup.entities.length} entities - ${totalSnippets} snippets</span>
+            <button class="mark-valid-btn" onclick="markDuplicateValid('${dup.leaderName}')" style="margin-left: auto; font-size: 11px; padding: 2px 8px; background: #e0e0e0; border: none; border-radius: 4px; cursor: pointer;">Mark as Valid</button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 8px;">
+            ${dup.entities.map((entity, idx) => `
+              <div class="merge-entity" data-entity-id="${entity.id}" onclick="toggleMergeEntity(this, ${groupIdx})" style="display: flex; align-items: center; gap: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; cursor: pointer;">
+                <div class="merge-entity-radio" style="width: 16px; height: 16px; border: 2px solid #666; border-radius: 50%;"></div>
+                <div style="flex: 1;">
+                  <div style="font-weight: 500;">${getFieldValue(entity, 'name')}</div>
+                  <div style="font-size: 12px; color: #666;">${getFieldValue(entity, 'leaderTitle') || '(no title)'}</div>
+                </div>
+                <div style="font-size: 11px; color: #999;">${entity.snippets?.length || 0} snippets</div>
+              </div>
+            `).join('')}
+          </div>
+          <div class="merge-actions" style="margin-top: 8px; display: flex; gap: 8px;">
+            <button class="merge-btn" onclick="executeMerge(${groupIdx})" disabled style="background: #4CAF50; color: white; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; opacity: 0.5;">Merge Selected</button>
+            <span class="merge-hint" style="font-size: 11px; color: #999; align-self: center;">Click entities to select canonical (green) and to-merge (red)</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  modal.style.display = 'flex';
+}
+
+// Toggle entity selection for merge
+function toggleMergeEntity(el, groupIdx) {
+  const entityId = el.dataset.entityId;
+  if (!mergeSelections[groupIdx]) {
+    mergeSelections[groupIdx] = { canonical: null, toMerge: [] };
+  }
+
+  const sel = mergeSelections[groupIdx];
+  const radio = el.querySelector('.merge-entity-radio');
+
+  if (sel.canonical === entityId) {
+    sel.canonical = null;
+    radio.style.background = '';
+    radio.style.borderColor = '#666';
+  } else if (sel.toMerge.includes(entityId)) {
+    sel.toMerge = sel.toMerge.filter(id => id !== entityId);
+    radio.style.background = '';
+    radio.style.borderColor = '#666';
+  } else if (!sel.canonical) {
+    sel.canonical = entityId;
+    radio.style.background = '#4CAF50';
+    radio.style.borderColor = '#4CAF50';
+  } else {
+    sel.toMerge.push(entityId);
+    radio.style.background = '#f44336';
+    radio.style.borderColor = '#f44336';
+  }
+
+  // Update merge button state
+  const groupEl = el.closest('.merge-group');
+  const mergeBtn = groupEl.querySelector('.merge-btn');
+  if (sel.canonical && sel.toMerge.length > 0) {
+    mergeBtn.disabled = false;
+    mergeBtn.style.opacity = '1';
+  } else {
+    mergeBtn.disabled = true;
+    mergeBtn.style.opacity = '0.5';
+  }
+}
+
+// Execute merge
+function executeMerge(groupIdx) {
+  const sel = mergeSelections[groupIdx];
+  if (!sel || !sel.canonical || sel.toMerge.length === 0) return;
+
+  const allNodes = collectAllNodes(DATA[currentCompany].root);
+  const canonicalNode = allNodes.find(n => n.id === sel.canonical);
+  const toMergeNodes = allNodes.filter(n => sel.toMerge.includes(n.id));
+
+  const aliases = toMergeNodes.map(n => getFieldValue(n, 'name'));
+  const mergedSnippets = toMergeNodes.flatMap(n => (n.snippets || []).map(s => s.id || s.date));
+
+  entityMerges[sel.canonical] = {
+    absorbed: sel.toMerge,
+    aliases: aliases,
+    mergedSnippets: mergedSnippets,
+    mergedAt: new Date().toISOString()
+  };
+
+  localStorage.setItem('entityMerges', JSON.stringify(entityMerges));
+  saveEntityMergeToKV(sel.canonical, entityMerges[sel.canonical]);
+
+  delete mergeSelections[groupIdx];
+  renderCompany(currentCompany);
+  showDuplicatesModal();
+}
+
+// Mark duplicate as valid (not a real duplicate)
+function markDuplicateValid(leaderName) {
+  const validKey = `validDuplicate:${currentCompany}:${leaderName}`;
+  localStorage.setItem(validKey, 'true');
+  showDuplicatesModal();
+  updateDuplicatesBadge();
+}
+
+// Unmerge entities
+function unmergeEntity(canonicalId) {
+  delete entityMerges[canonicalId];
+  localStorage.setItem('entityMerges', JSON.stringify(entityMerges));
+  deleteEntityMergeFromKV(canonicalId);
+  renderCompany(currentCompany);
+  showDuplicatesModal();
+}
+
+// Close duplicates modal
+function closeDuplicatesModal() {
+  document.getElementById('duplicatesModal').style.display = 'none';
+  mergeSelections = {};
+}
+
+// Update duplicates badge count
+function updateDuplicatesBadge() {
+  const count = getDuplicateCount();
+  const badge = document.getElementById('duplicatesBadge');
+  if (badge) {
+    badge.textContent = count;
+    badge.style.display = count > 0 ? 'inline' : 'none';
+  }
+}
+
+// ===== END ENTITY MERGES =====
 
 // Helper to get all size mentions for a Manual Map node (including approved matches)
 function getManualNodeSizeMentions(node) {
@@ -76022,6 +76577,32 @@ function handleTeamSizeInputChange(nodeId, value) {
 
 function saveOverrides() {
   localStorage.setItem('orgChartOverrides', JSON.stringify(overrides));
+}
+
+// Save single override to Vercel KV
+async function saveOverrideToKV(entityId, override) {
+  try {
+    await fetch(`/api/corrections?account=${currentCompany.toLowerCase()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityId, override })
+    });
+  } catch (e) {
+    console.log('Override saved locally (KV sync pending)');
+  }
+}
+
+// Delete single override from Vercel KV
+async function deleteOverrideFromKV(entityId) {
+  try {
+    await fetch(`/api/corrections?account=${currentCompany.toLowerCase()}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityId })
+    });
+  } catch (e) {
+    console.log('Override deleted locally (KV sync pending)');
+  }
 }
 
 // Date utilities
@@ -76144,33 +76725,41 @@ function countChangesInRange(rangeStart, rangeEnd) {
 
 // Render tree
 function renderTree(node, level = 0, rangeStart, rangeEnd) {
+  // Skip absorbed (merged) entities
+  if (isEntityAbsorbed(node.id)) {
+    const div = document.createElement('div');
+    div.style.display = 'none';
+    return div;
+  }
+
   const div = document.createElement('div');
   div.className = `child-branch level-${level}`;
-  
+
   const nodeEl = document.createElement('div');
   nodeEl.className = 'node';
-  
+
   // Check if entity existed in date range
   const firstSeen = node.firstSeen ? new Date(node.firstSeen) : new Date('2024-01-01');
   const rangeStartDate = new Date(rangeStart);
   if (firstSeen > rangeStartDate) {
     // Entity didn't exist at start of range - show dimmed
   }
-  
+
   // Filter snippets by date range
   const snippetsInRange = node.snippets?.filter(s => isInDateRange(s.date, rangeStart, rangeEnd)) || [];
   if (snippetsInRange.length === 0 && level > 0) {
     nodeEl.classList.add('outside-range');
   }
-  
+
   if (node.override) nodeEl.classList.add('user-override');
+  if (fieldEdits[node.id]) nodeEl.classList.add('user-edited');
   nodeEl.dataset.id = node.id;
   nodeEl.draggable = level > 0;
-  
+
   // Change indicators
   const changes = getChangesForEntity(node.id, rangeStart, rangeEnd);
   const hasChanges = changes.reorg.length || changes.leadership.length || changes.size.length;
-  
+
   if (hasChanges) {
     nodeEl.classList.add('has-changes');
     const indicators = document.createElement('div');
@@ -76180,11 +76769,23 @@ function renderTree(node, level = 0, rangeStart, rangeEnd) {
     if (changes.size.length) indicators.innerHTML += '<div class="node-change-dot size"></div>';
     nodeEl.appendChild(indicators);
   }
-  
-  // Node name
+
+  // Node name (use edited value if available)
   const nameEl = document.createElement('div');
   nameEl.className = 'node-name';
-  nameEl.textContent = node.name;
+  nameEl.textContent = getFieldValue(node, 'name');
+
+  // Add edit pencil icon
+  const editBtn = document.createElement('span');
+  editBtn.className = 'edit-btn';
+  editBtn.innerHTML = '✏️';
+  editBtn.title = 'Edit entity';
+  editBtn.style.cssText = 'cursor: pointer; margin-left: 6px; font-size: 12px; opacity: 0.5;';
+  editBtn.onclick = (e) => {
+    e.stopPropagation();
+    startEdit(node.id, nodeEl);
+  };
+  nameEl.appendChild(editBtn);
   nodeEl.appendChild(nameEl);
   
   // Leader
@@ -76300,13 +76901,15 @@ function renderTree(node, level = 0, rangeStart, rangeEnd) {
     const workingTree = buildWorkingTree(DATA[currentCompany].root);
     if (isDescendant(draggedNodeId, node.id, workingTree)) return;
     
-    overrides[draggedNodeId] = {
+    const newOverride = {
       originalParent: getOriginalParentName(draggedNodeId),
       newParent: node.id,
       newParentName: node.name,
       movedAt: new Date().toISOString().split('T')[0]
     };
+    overrides[draggedNodeId] = newOverride;
     saveOverrides();
+    saveOverrideToKV(draggedNodeId, newOverride); // Sync to Vercel KV
     renderCompany(currentCompany);
   });
   
@@ -76565,6 +77168,7 @@ function selectNode(node, nodeEl, rangeStart, rangeEnd) {
 window.resetNodeOverride = function(nodeId) {
   delete overrides[nodeId];
   saveOverrides();
+  deleteOverrideFromKV(nodeId); // Sync deletion to Vercel KV
   renderCompany(currentCompany);
 };
 
@@ -76934,17 +77538,54 @@ function hasManualMap(companyKey) {
 // MATCH REVIEW SYSTEM
 // ============================================
 
-// Load match review state from localStorage
-function loadMatchReviewState() {
+// Load match review state from localStorage and Vercel KV
+async function loadMatchReviewState() {
   const stored = localStorage.getItem('matchReviewState');
   if (stored) {
     matchReviewState = JSON.parse(stored);
   }
+
+  // Fetch from Vercel KV per company
+  try {
+    const response = await fetch(`/api/match-review?account=${currentCompany.toLowerCase()}`);
+    if (response.ok) {
+      const kvData = await response.json();
+      if (kvData && (kvData.approved || kvData.rejected || kvData.manual)) {
+        // Merge KV data into state (KV takes precedence for current company)
+        matchReviewState[currentCompany] = {
+          approved: { ...(matchReviewState[currentCompany]?.approved || {}), ...(kvData.approved || {}) },
+          rejected: { ...(matchReviewState[currentCompany]?.rejected || {}), ...(kvData.rejected || {}) },
+          manual: { ...(matchReviewState[currentCompany]?.manual || {}), ...(kvData.manual || {}) }
+        };
+        localStorage.setItem('matchReviewState', JSON.stringify(matchReviewState));
+      }
+    }
+  } catch (e) {
+    console.log('Using localStorage for match review state (KV not available)');
+  }
 }
 
-// Save match review state to localStorage
+// Save match review state to localStorage and Vercel KV
 function saveMatchReviewState() {
   localStorage.setItem('matchReviewState', JSON.stringify(matchReviewState));
+  // Sync current company's state to KV
+  saveMatchReviewStateToKV();
+}
+
+// Save match review state to Vercel KV
+async function saveMatchReviewStateToKV() {
+  const companyState = matchReviewState[currentCompany];
+  if (!companyState) return;
+
+  try {
+    await fetch(`/api/match-review?account=${currentCompany.toLowerCase()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: companyState })
+    });
+  } catch (e) {
+    console.log('Match review state saved locally (KV sync pending)');
+  }
 }
 
 // Initialize match review state for a company
@@ -77754,6 +78395,11 @@ function toggleEvidence() {
 loadOverrides();
 loadSizeOverrides();
 loadMatchReviewState();
+loadFieldEdits();
+loadEntityMerges();
+
+// Update duplicates badge after load
+setTimeout(updateDuplicatesBadge, 100);
 
 // Sync currentCompany with dropdown's actual value
 currentCompany = document.getElementById('companySelect').value;
@@ -78102,6 +78748,59 @@ document.getElementById('resolveModal').addEventListener('click', (e) => {
 
 // Load resolutions on startup
 loadResolutions();
+
+// ============================================
+// AUTOSAVE SYSTEM
+// ============================================
+
+// Autosave all state to Vercel KV every 5 minutes
+const AUTOSAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+async function performAutosave() {
+  try {
+    const state = {
+      overrides: overrides,
+      sizeOverrides: sizeOverrides,
+      matchReviewState: matchReviewState,
+      conflictResolutions: conflictResolutions,
+      fieldEdits: fieldEdits,
+      entityMerges: entityMerges,
+      mode: currentMode
+    };
+
+    await fetch(`/api/autosave?account=${currentCompany.toLowerCase()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state })
+    });
+    console.log('[Autosave] State saved to KV at', new Date().toISOString());
+  } catch (e) {
+    console.log('[Autosave] Failed (will retry):', e.message);
+  }
+}
+
+// Start autosave timer
+setInterval(performAutosave, AUTOSAVE_INTERVAL);
+
+// Also save on page unload
+window.addEventListener('beforeunload', () => {
+  // Use sendBeacon for reliable unload saves
+  const state = {
+    overrides: overrides,
+    sizeOverrides: sizeOverrides,
+    matchReviewState: matchReviewState,
+    conflictResolutions: conflictResolutions,
+    fieldEdits: fieldEdits,
+    entityMerges: entityMerges,
+    mode: currentMode
+  };
+  navigator.sendBeacon(
+    `/api/autosave?account=${currentCompany.toLowerCase()}`,
+    JSON.stringify({ state })
+  );
+});
+
+console.log('[Init] Autosave enabled (every 5 minutes)');
 </script>
 
 </body>

@@ -1,17 +1,16 @@
 import { kv } from '@vercel/kv';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-interface Override {
-  originalParent: string;
-  newParent: string;
-  newParentName: string;
-  movedAt: string;
-  user?: string;
-  savedAt?: string;
+interface FieldEdit {
+  name?: { original: string; edited: string };
+  leaderName?: { original: string; edited: string };
+  leaderTitle?: { original: string; edited: string };
+  editedAt: string;
+  user: string;
 }
 
-interface OverridesMap {
-  [entityId: string]: Override;
+interface FieldEditsMap {
+  [entityId: string]: FieldEdit;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -30,35 +29,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'account parameter required' });
   }
 
-  const key = `corrections:${account}`;
+  const kvKey = `field-edits:${account}`;
 
   try {
     if (req.method === 'GET') {
-      const data = await kv.get<OverridesMap>(key) || {};
+      const data = await kv.get<FieldEditsMap>(kvKey) || {};
       return res.json(data);
     }
 
     if (req.method === 'POST') {
-      const { entityId, override, user } = req.body as {
+      const { entityId, edit, user } = req.body as {
         entityId: string;
-        override: Override;
+        edit: Omit<FieldEdit, 'editedAt' | 'user'>;
         user?: string;
       };
 
-      if (!entityId || !override) {
-        return res.status(400).json({ error: 'entityId and override required' });
+      if (!entityId || !edit) {
+        return res.status(400).json({ error: 'entityId and edit required' });
       }
 
-      const data = await kv.get<OverridesMap>(key) || {};
+      const data = await kv.get<FieldEditsMap>(kvKey) || {};
 
       data[entityId] = {
-        ...override,
-        user: user || 'anonymous',
-        savedAt: new Date().toISOString()
+        ...edit,
+        editedAt: new Date().toISOString(),
+        user: user || 'anonymous'
       };
 
-      await kv.set(key, data);
-      return res.json({ success: true, savedCount: Object.keys(data).length });
+      await kv.set(kvKey, data);
+      return res.json({ success: true, editCount: Object.keys(data).length });
     }
 
     if (req.method === 'DELETE') {
@@ -68,9 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'entityId required' });
       }
 
-      const data = await kv.get<OverridesMap>(key) || {};
+      const data = await kv.get<FieldEditsMap>(kvKey) || {};
       delete data[entityId];
-      await kv.set(key, data);
+      await kv.set(kvKey, data);
       return res.json({ success: true, remainingCount: Object.keys(data).length });
     }
 

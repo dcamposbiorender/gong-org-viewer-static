@@ -1,17 +1,15 @@
 import { kv } from '@vercel/kv';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-interface Override {
-  originalParent: string;
-  newParent: string;
-  newParentName: string;
-  movedAt: string;
-  user?: string;
+interface SizeOverride {
+  selectedSizeIndex: number | null;
+  customValue: string | null;
   savedAt?: string;
+  user?: string;
 }
 
-interface OverridesMap {
-  [entityId: string]: Override;
+interface SizeOverridesMap {
+  [key: string]: SizeOverride;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -30,47 +28,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'account parameter required' });
   }
 
-  const key = `corrections:${account}`;
+  const kvKey = `sizes:${account}`;
 
   try {
     if (req.method === 'GET') {
-      const data = await kv.get<OverridesMap>(key) || {};
+      const data = await kv.get<SizeOverridesMap>(kvKey) || {};
       return res.json(data);
     }
 
     if (req.method === 'POST') {
-      const { entityId, override, user } = req.body as {
-        entityId: string;
-        override: Override;
+      const { key, override, user } = req.body as {
+        key: string;
+        override: SizeOverride;
         user?: string;
       };
 
-      if (!entityId || !override) {
-        return res.status(400).json({ error: 'entityId and override required' });
+      if (!key || !override) {
+        return res.status(400).json({ error: 'key and override required' });
       }
 
-      const data = await kv.get<OverridesMap>(key) || {};
+      const data = await kv.get<SizeOverridesMap>(kvKey) || {};
 
-      data[entityId] = {
+      data[key] = {
         ...override,
-        user: user || 'anonymous',
-        savedAt: new Date().toISOString()
+        savedAt: new Date().toISOString(),
+        user: user || 'anonymous'
       };
 
-      await kv.set(key, data);
+      await kv.set(kvKey, data);
       return res.json({ success: true, savedCount: Object.keys(data).length });
     }
 
     if (req.method === 'DELETE') {
-      const { entityId } = req.body as { entityId: string };
+      const { key } = req.body as { key: string };
 
-      if (!entityId) {
-        return res.status(400).json({ error: 'entityId required' });
+      if (!key) {
+        return res.status(400).json({ error: 'key required' });
       }
 
-      const data = await kv.get<OverridesMap>(key) || {};
-      delete data[entityId];
-      await kv.set(key, data);
+      const data = await kv.get<SizeOverridesMap>(kvKey) || {};
+      delete data[key];
+      await kv.set(kvKey, data);
       return res.json({ success: true, remainingCount: Object.keys(data).length });
     }
 
