@@ -1971,6 +1971,29 @@
   </div>
 </div>
 
+<!-- Entity Picker Modal -->
+<div class="resolve-modal" id="entityPickerModal" style="display: none;">
+  <div class="resolve-modal-content" style="max-width: 500px; max-height: 80vh;">
+    <div class="resolve-modal-header">
+      <h3>Pick Entity for Match</h3>
+      <button class="changes-modal-close" onclick="closeEntityPickerModal()">&times;</button>
+    </div>
+    <div class="resolve-modal-body" style="padding: 16px;">
+      <div style="margin-bottom: 12px;">
+        <input type="text" id="entityPickerSearch" placeholder="Search entities..."
+               style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
+               oninput="filterEntityPickerList()">
+      </div>
+      <div id="entityPickerList" style="max-height: 400px; overflow-y: auto;">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+    <div class="resolve-modal-footer">
+      <button class="resolve-btn resolve-btn-cancel" onclick="closeEntityPickerModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Graduate Modal -->
 <div class="resolve-modal" id="graduateModal" style="display: none;">
   <div class="resolve-modal-content" style="max-width: 500px;">
@@ -78165,9 +78188,104 @@ function getManualMapOptions(company) {
       node.children.forEach(child => traverse(child, currentPath));
     }
   }
-  traverse(MANUAL_DATA[company]);
+  traverse(MANUAL_DATA[company].root || MANUAL_DATA[company]);
   return options;
 }
+
+// ===== ENTITY PICKER MODAL =====
+
+// State for entity picker
+let entityPickerContext = { company: null, itemId: null };
+
+// Show entity picker modal
+function showEntityPickerModal(company, itemId) {
+  entityPickerContext = { company, itemId };
+
+  const modal = document.getElementById('entityPickerModal');
+  const list = document.getElementById('entityPickerList');
+  const search = document.getElementById('entityPickerSearch');
+
+  // Clear search
+  search.value = '';
+
+  // Get manual map options
+  const options = getManualMapOptions(company);
+
+  if (options.length === 0) {
+    list.innerHTML = `
+      <div style="padding: 20px; text-align: center; color: #999;">
+        No Manual Map available for ${company}.<br>
+        <small>Use "Graduate" in Auto mode to create one.</small>
+      </div>
+    `;
+  } else {
+    renderEntityPickerList(options);
+  }
+
+  modal.style.display = 'flex';
+  search.focus();
+}
+
+// Render the entity picker list
+function renderEntityPickerList(options) {
+  const list = document.getElementById('entityPickerList');
+  list.innerHTML = options.map(opt => `
+    <div class="entity-picker-item" onclick="selectEntityForMatch('${opt.name.replace(/'/g, "\\'")}', '${opt.path.replace(/'/g, "\\'")}')"
+         style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #eee; transition: background 0.2s;"
+         onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='transparent'">
+      <div style="font-weight: 500;">${opt.name}</div>
+      <div style="font-size: 11px; color: #888; margin-top: 2px;">${opt.path}</div>
+    </div>
+  `).join('');
+}
+
+// Filter entity picker list
+function filterEntityPickerList() {
+  const search = document.getElementById('entityPickerSearch').value.toLowerCase();
+  const options = getManualMapOptions(entityPickerContext.company);
+
+  const filtered = options.filter(opt =>
+    opt.name.toLowerCase().includes(search) ||
+    opt.path.toLowerCase().includes(search)
+  );
+
+  if (filtered.length === 0) {
+    document.getElementById('entityPickerList').innerHTML = `
+      <div style="padding: 20px; text-align: center; color: #999;">
+        No entities match "${search}"
+      </div>
+    `;
+  } else {
+    renderEntityPickerList(filtered);
+  }
+}
+
+// Select an entity and create a manual match
+function selectEntityForMatch(manualNode, manualPath) {
+  const { company, itemId } = entityPickerContext;
+
+  // Create manual match (similar to approve but tracks as manual selection)
+  initMatchReviewState(company);
+  delete matchReviewState[company].rejected[itemId];
+  delete matchReviewState[company].approved[itemId];
+  matchReviewState[company].manual[itemId] = {
+    manualNode,
+    manualPath,
+    manuallySelectedAt: new Date().toISOString()
+  };
+  saveMatchReviewState();
+
+  closeEntityPickerModal();
+  renderMatchReview(company);
+}
+
+// Close entity picker modal
+function closeEntityPickerModal() {
+  document.getElementById('entityPickerModal').style.display = 'none';
+  entityPickerContext = { company: null, itemId: null };
+}
+
+// ===== END ENTITY PICKER =====
 
 // Truncate snippet text
 function mrTruncateSnippet(text, maxLength = 150) {
@@ -78407,11 +78525,13 @@ function renderMatchReview(company) {
               ${suggestion?.manual_node_name ? `
                 <button class="mr-btn mr-btn-approve" onclick="approveMatch('${targetCompany}', '${item.id}', '${(suggestion.manual_node_name || '').replace(/'/g, "\\'")}', '${(suggestion.manual_node_path || '').replace(/'/g, "\\'")}')">Approve</button>
                 <button class="mr-btn mr-btn-reject" onclick="rejectMatch('${targetCompany}', '${item.id}')">Reject</button>
-              ` : '<span style="color: #999; font-size: 11px;">No suggestion</span>'}
+              ` : ''}
+              <button class="mr-btn" onclick="showEntityPickerModal('${targetCompany}', '${item.id}')" style="background: #8b7355;" title="Pick a different entity">Pick</button>
             </div>
           ` : `
             <div class="mr-actions">
               <span class="mr-status-badge ${status}">${status}</span>
+              <button class="mr-btn" onclick="showEntityPickerModal('${targetCompany}', '${item.id}')" style="background: #8b7355;" title="Change entity">Pick</button>
               <button class="mr-btn" onclick="resetMatchItem('${targetCompany}', '${item.id}')">Reset</button>
             </div>
           `}
