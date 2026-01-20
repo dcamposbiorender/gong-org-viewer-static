@@ -11,3 +11,8 @@ node_modules/
 
 # OS
 .DS_Store
+
+# Large data files
+*.csv
+*.CSV
+data/*.csv
