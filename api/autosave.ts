@@ -1,5 +1,6 @@
 import { kv } from '@vercel/kv';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { validateAccount } from './_lib/validation';
 
 interface AutosaveState {
   overrides: object;
@@ -24,11 +25,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  const { account } = req.query;
-
-  if (!account || typeof account !== 'string') {
-    return res.status(400).json({ error: 'account parameter required' });
+  const validation = validateAccount(req.query.account as string | undefined);
+  if (!validation.isValid) {
+    return res.status(400).json({ error: validation.error });
   }
+  const account = validation.account!;
 
   const kvKey = `autosave:${account}`;
 
