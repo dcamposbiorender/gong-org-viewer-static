@@ -474,6 +474,7 @@ def convert_node_for_viewer(node: Dict, leader_lookup: Dict = None,
             "internalName": snippet.get("internalName"),
             "customerEmail": snippet.get("customerEmail"),
             "internalEmail": snippet.get("internalEmail"),
+            "speakerId": snippet.get("speakerId"),
             "sizeMentions": snippet.get("sizeMentions", [])
         }
 
