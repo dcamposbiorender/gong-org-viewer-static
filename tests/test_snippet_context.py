@@ -47,7 +47,7 @@ class TestFindContext:
         assert result is None, "find_context should return None for unmatched quotes"
 
     def test_speaker_ids_stripped(self):
-        """[Speaker 123456] replaced with [Speaker] in context."""
+        """Speaker IDs are kept raw in context (resolved to names at display time in JS)."""
         transcript_data = {
             'text': '[Speaker 5015271624001198436]: Hello there. The quote is here. [Speaker 4033435827504806251]: Thanks.',
             'title': 'Speaker Test'
@@ -57,11 +57,9 @@ class TestFindContext:
         result = find_context(quote, transcript_data)
 
         assert result is not None
-        # Speaker IDs should be stripped to [Speaker]
-        assert '[Speaker 5015271624001198436]' not in result['contextBefore']
-        assert '[Speaker 4033435827504806251]' not in result['contextAfter']
-        assert '[Speaker]' in result['contextBefore']
-        assert '[Speaker]' in result['contextAfter']
+        # Speaker IDs should be KEPT (resolved at display time in JS)
+        assert '[Speaker 5015271624001198436]' in result['contextBefore']
+        assert '[Speaker 4033435827504806251]' in result['contextAfter']
 
     def test_ellipsis_added(self):
         """Context has ... prefix when truncated at start, ... suffix when truncated at end."""

@@ -102,9 +102,9 @@ def find_context(quote: str, transcript_data: dict, context_chars: int = 1000) -
     start = max(0, idx - context_chars)
     end = min(len(text), idx + len(search_key) + context_chars)
 
-    # Strip speaker IDs for readability
-    before = re.sub(r'\[Speaker \d+\]', '[Speaker]', text[start:idx])
-    after = re.sub(r'\[Speaker \d+\]', '[Speaker]', text[idx + len(search_key):end])
+    # Keep original speaker IDs — resolved to names at display time in JS
+    before = text[start:idx]
+    after = text[idx + len(search_key):end]
 
     # Add ellipsis if truncated
     if start > 0:
