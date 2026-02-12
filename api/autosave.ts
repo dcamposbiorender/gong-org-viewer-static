@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { kv } from './_lib/kv';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateAccount } from './_lib/validation';
 

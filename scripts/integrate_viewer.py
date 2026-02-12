@@ -42,6 +42,82 @@ COMPANY_DISPLAY_NAMES = {
     "roche": "Roche"
 }
 
+BATCHES_DIR = BASE_DIR / "batches_enriched"
+
+
+def load_transcripts(company: str) -> dict:
+    """Load all transcripts for a company from batches_enriched/.
+    Returns: { call_id: { 'text': str, 'title': str } }
+    """
+    transcripts = {}
+    batch_dir = BATCHES_DIR / company
+    if not batch_dir.exists():
+        print(f"  Warning: No batches_enriched/{company} directory")
+        return transcripts
+
+    for batch_file in sorted(batch_dir.glob("batch_*.json")):
+        with open(batch_file) as f:
+            batch = json.load(f)
+        for call in batch.get('calls', []):
+            transcripts[call['call_id']] = {
+                'text': call.get('transcript_text', ''),
+                'title': call.get('call_title', '')
+            }
+    return transcripts
+
+
+def find_context(quote: str, transcript_data: dict, context_chars: int = 1000) -> dict | None:
+    """Find snippet quote in transcript and extract surrounding context.
+    Uses full normalized quote match (up to 1000 chars), not prefix.
+    Falls back to matching with speaker tags stripped (LLM often removes them).
+    """
+    text = transcript_data.get('text') or ''
+    if not text or not quote:
+        return None
+
+    norm_text = re.sub(r'\s+', ' ', text.lower())
+    norm_quote = re.sub(r'\s+', ' ', quote.lower().strip())
+
+    # Try full quote match (up to 1000 chars)
+    search_key = norm_quote[:1000]
+    idx = norm_text.find(search_key)
+
+    # Fallback: strip speaker tags (and trailing colon) from transcript and retry
+    # LLM extraction often removes "[Speaker 123456]: " from quotes
+    use_stripped = False
+    if idx < 0:
+        stripped_text = re.sub(r'\[Speaker \d+\]:\s*', '', text)
+        stripped_text = re.sub(r'\[Speaker \d+\]', '', stripped_text)
+        norm_stripped = re.sub(r'\s+', ' ', stripped_text.lower())
+        idx = norm_stripped.find(search_key)
+        if idx >= 0:
+            use_stripped = True
+            text = stripped_text
+            norm_text = norm_stripped
+
+    if idx < 0:
+        return None
+
+    # Extract context windows from original text
+    start = max(0, idx - context_chars)
+    end = min(len(text), idx + len(search_key) + context_chars)
+
+    # Strip speaker IDs for readability
+    before = re.sub(r'\[Speaker \d+\]', '[Speaker]', text[start:idx])
+    after = re.sub(r'\[Speaker \d+\]', '[Speaker]', text[idx + len(search_key):end])
+
+    # Add ellipsis if truncated
+    if start > 0:
+        before = '...' + before
+    if end < len(text):
+        after = after + '...'
+
+    return {
+        'contextBefore': before,
+        'contextAfter': after,
+        'callTitle': transcript_data.get('title', '')
+    }
+
 
 def load_enriched_auto_map(company: str) -> Dict:
     """Load auto map for a company.
@@ -95,6 +171,8 @@ def generate_match_review_from_auto_map(company: str, auto_map: Dict, manual_map
 
     Finds entities in auto map that DON'T match any manual map node.
     These are the "unmatched" entities that need user review.
+
+    Loads LLM match suggestions to provide suggested matches.
     """
     if not auto_map or not auto_map.get("root"):
         return {}
@@ -102,6 +180,14 @@ def generate_match_review_from_auto_map(company: str, auto_map: Dict, manual_map
     # Build set of all manual map entity names (normalized)
     manual_root = manual_map.get("root", manual_map)
     manual_names = build_manual_map_names(manual_root) if manual_root else set()
+
+    # Load LLM match suggestions
+    llm_data = load_llm_matches(company)
+    llm_lookup = {}
+    for match in llm_data.get("matches", []):
+        entity_name = normalize_entity_name(match.get("entity_name", ""))
+        if entity_name:
+            llm_lookup[entity_name] = match
 
     # Collect all entities from auto map with their snippets
     unmatched_items = []
@@ -117,6 +203,19 @@ def generate_match_review_from_auto_map(company: str, auto_map: Dict, manual_map
         if snippets and not is_matched:
             # This entity has evidence but no manual map match - add to review
             first_snippet = snippets[0]
+
+            # Look up LLM suggested match
+            llm_match = llm_lookup.get(name_lower)
+            llm_suggested_match = None
+            if llm_match and llm_match.get("matched_node_id"):
+                llm_suggested_match = {
+                    "manual_node_id": llm_match.get("matched_node_id"),
+                    "manual_node_name": llm_match.get("matched_node_name"),
+                    "manual_node_path": llm_match.get("matched_node_path"),
+                    "confidence": llm_match.get("confidence"),
+                    "reasoning": llm_match.get("reasoning")
+                }
+
             item = {
                 "id": f"{company}_{name_lower.replace(' ', '_')}_{len(unmatched_items)}",
                 "company": company,
@@ -132,7 +231,7 @@ def generate_match_review_from_auto_map(company: str, auto_map: Dict, manual_map
                 "person_email": first_snippet.get("customerEmail"),
                 "internal_name": first_snippet.get("internalName"),
                 "internal_email": first_snippet.get("internalEmail"),
-                "llm_suggested_match": None,  # Could add fuzzy matching later
+                "llm_suggested_match": llm_suggested_match,
                 "status": "pending",
                 "gong_url": first_snippet.get("gongUrl"),
                 "call_id": first_snippet.get("callId"),
@@ -146,11 +245,35 @@ def generate_match_review_from_auto_map(company: str, auto_map: Dict, manual_map
 
     collect_unmatched(auto_map["root"])
 
+    # Count items with suggestions
+    with_suggestions = sum(1 for item in unmatched_items if item.get("llm_suggested_match"))
+
     return {
         "total_unmatched": len(unmatched_items),
-        "total_with_suggestions": 0,  # No LLM matching in new pipeline
+        "total_with_suggestions": with_suggestions,
         "items": unmatched_items
     }
+
+
+def load_llm_matches(company: str) -> Dict:
+    """Load LLM match suggestions for a company.
+
+    Prefers non-cleaned matches (from true_auto_map entities).
+    """
+    # Prefer non-cleaned matches (from true_auto_map entities)
+    regular_path = OUTPUT_DIR / f"{company}_llm_matches.json"
+    if regular_path.exists():
+        with open(regular_path) as f:
+            return json.load(f)
+
+    # Fallback to cleaned matches (legacy)
+    cleaned_path = OUTPUT_DIR / f"{company}_cleaned_llm_matches.json"
+    if cleaned_path.exists():
+        with open(cleaned_path) as f:
+            return json.load(f)
+
+    print(f"  Warning: No LLM matches found for {company}")
+    return {}
 
 
 def load_manual_map(company: str) -> Dict:
@@ -301,7 +424,8 @@ def build_leader_lookup(manual_root: Dict) -> Dict[str, Dict]:
     return lookup
 
 
-def convert_node_for_viewer(node: Dict, leader_lookup: Dict = None) -> Dict:
+def convert_node_for_viewer(node: Dict, leader_lookup: Dict = None,
+                            transcripts: dict = None, context_stats: dict = None) -> Dict:
     """Convert auto map node to viewer DATA format.
 
     Handles both:
@@ -310,6 +434,11 @@ def convert_node_for_viewer(node: Dict, leader_lookup: Dict = None) -> Dict:
 
     If leader_lookup is provided and node has no leader, looks up leader
     from manual map by entity name.
+
+    If transcripts is provided, enriches each snippet with contextBefore,
+    contextAfter, and callTitle from the transcript.
+
+    context_stats is a mutable dict for tracking: matched, total, failures.
 
     Viewer expects snippets directly on node.
     """
@@ -334,42 +463,63 @@ def convert_node_for_viewer(node: Dict, leader_lookup: Dict = None) -> Dict:
         "children": []
     }
 
+    def build_viewer_snippet(snippet):
+        """Build a viewer snippet dict and enrich with context if available."""
+        viewer_snippet = {
+            "quote": snippet.get("quote", ""),
+            "date": snippet.get("date"),
+            "gongUrl": snippet.get("gongUrl"),
+            "callId": snippet.get("callId"),
+            "customerName": snippet.get("customerName"),
+            "internalName": snippet.get("internalName"),
+            "customerEmail": snippet.get("customerEmail"),
+            "internalEmail": snippet.get("internalEmail"),
+            "sizeMentions": snippet.get("sizeMentions", [])
+        }
+
+        # Enrich with transcript context if available
+        if transcripts and context_stats is not None:
+            call_id = snippet.get("callId")
+            if call_id and call_id in transcripts:
+                context_stats['total'] += 1
+                context = find_context(viewer_snippet['quote'], transcripts[call_id])
+                if context:
+                    viewer_snippet['contextBefore'] = context['contextBefore']
+                    viewer_snippet['contextAfter'] = context['contextAfter']
+                    viewer_snippet['callTitle'] = context['callTitle']
+                    context_stats['matched'] += 1
+                else:
+                    context_stats['failures'].append({
+                        'callId': call_id,
+                        'quote': viewer_snippet['quote'][:60]
+                    })
+            elif call_id:
+                # callId exists but not in transcripts
+                context_stats['total'] += 1
+                context_stats['failures'].append({
+                    'callId': call_id,
+                    'quote': viewer_snippet['quote'][:60],
+                    'reason': 'call_id not in transcripts'
+                })
+
+        return viewer_snippet
+
     # Check if snippets are already at node level (TRUE auto map format)
     if node.get("snippets"):
         for snippet in node.get("snippets", []):
-            viewer_snippet = {
-                "quote": snippet.get("quote", ""),
-                "date": snippet.get("date"),
-                "gongUrl": snippet.get("gongUrl"),
-                "callId": snippet.get("callId"),
-                "customerName": snippet.get("customerName"),
-                "internalName": snippet.get("internalName"),
-                "customerEmail": snippet.get("customerEmail"),
-                "internalEmail": snippet.get("internalEmail"),
-                "sizeMentions": snippet.get("sizeMentions", [])
-            }
-            result["snippets"].append(viewer_snippet)
+            result["snippets"].append(build_viewer_snippet(snippet))
     else:
         # Legacy: Extract snippets from gong_evidence
         gong_evidence = node.get("gong_evidence", {})
         if gong_evidence:
             for snippet in gong_evidence.get("snippets", []):
-                viewer_snippet = {
-                    "quote": snippet.get("quote", ""),
-                    "date": snippet.get("date"),
-                    "gongUrl": snippet.get("gongUrl"),
-                    "callId": snippet.get("callId"),
-                    "customerName": snippet.get("customerName"),
-                    "internalName": snippet.get("internalName"),
-                    "customerEmail": snippet.get("customerEmail"),
-                    "internalEmail": snippet.get("internalEmail"),
-                    "sizeMentions": snippet.get("sizeMentions", [])
-                }
-                result["snippets"].append(viewer_snippet)
+                result["snippets"].append(build_viewer_snippet(snippet))
 
     # Recursively process children
     for child in node.get("children", []):
-        result["children"].append(convert_node_for_viewer(child, leader_lookup))
+        result["children"].append(
+            convert_node_for_viewer(child, leader_lookup, transcripts, context_stats)
+        )
 
     return result
 
@@ -458,11 +608,13 @@ def convert_manual_node_for_viewer(node: Dict, entity_lookup: Dict = None) -> Di
     return result
 
 
-def convert_auto_map_to_data(company: str, auto_map: Dict, manual_map: Dict) -> Dict:
+def convert_auto_map_to_data(company: str, auto_map: Dict, manual_map: Dict,
+                             transcripts: dict = None) -> Dict:
     """Convert auto map to viewer DATA format.
 
     Handles both TRUE auto map and legacy enriched auto map formats.
     Merges leader data from manual map if not present in auto map.
+    If transcripts is provided, enriches snippets with context windows.
     """
     raw_root = auto_map.get("root", {})
 
@@ -472,8 +624,26 @@ def convert_auto_map_to_data(company: str, auto_map: Dict, manual_map: Dict) -> 
     if manual_root:
         leader_lookup = build_leader_lookup(manual_root)
 
-    # Convert root to viewer format with leader lookup
-    root = convert_node_for_viewer(raw_root, leader_lookup)
+    # Track context extraction stats
+    context_stats = {'matched': 0, 'total': 0, 'failures': []}
+
+    # Convert root to viewer format with leader lookup and transcripts
+    root = convert_node_for_viewer(raw_root, leader_lookup, transcripts, context_stats)
+
+    # Write context failure report and print stats
+    if transcripts and context_stats['total'] > 0:
+        matched = context_stats['matched']
+        total = context_stats['total']
+        pct = 100 * matched // max(total, 1)
+        print(f"    Context added to {matched} of {total} snippets ({pct}%)")
+
+        if context_stats['failures']:
+            failures_dir = OUTPUT_DIR / company
+            failures_dir.mkdir(parents=True, exist_ok=True)
+            failures_path = failures_dir / "context_failures.json"
+            with open(failures_path, 'w') as f:
+                json.dump(context_stats['failures'], f, indent=2)
+            print(f"    Context failures: {len(context_stats['failures'])} (see {failures_path})")
 
     # Get date range - prefer from auto_map metadata, else calculate
     if auto_map.get("dateRange"):
@@ -608,8 +778,13 @@ def generate_viewer_data() -> tuple:
         enriched_map = load_enriched_auto_map(company)
         manual_map = load_manual_map(company)
 
+        # Load transcripts for context extraction
+        transcripts = load_transcripts(company)
+        if transcripts:
+            print(f"    Loaded {len(transcripts)} transcripts for context extraction")
+
         if enriched_map:
-            data[company] = convert_auto_map_to_data(company, enriched_map, manual_map)
+            data[company] = convert_auto_map_to_data(company, enriched_map, manual_map, transcripts)
             print(f"    DATA: {data[company]['stats']['entities']} entities, {data[company]['stats']['snippets']} snippets")
 
         if manual_map:

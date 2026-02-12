@@ -16,3 +16,4 @@ node_modules/
 *.csv
 *.CSV
 data/*.csv
+.env*.local
