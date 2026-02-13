@@ -63,10 +63,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'DELETE') {
-      const { entityId } = req.body as { entityId: string };
+      const { entityId, confirmBulkDelete } = req.body as {
+        entityId?: string;
+        confirmBulkDelete?: boolean;
+      };
+
+      if (confirmBulkDelete) {
+        // Bulk delete: clear entire corrections key for this account
+        await kv.del(key);
+        return res.json({ success: true, remainingCount: 0 });
+      }
 
       if (!entityId) {
-        return res.status(400).json({ error: 'entityId required' });
+        return res.status(400).json({ error: 'entityId or confirmBulkDelete required' });
       }
 
       const data = await kv.get<OverridesMap>(key) || {};
