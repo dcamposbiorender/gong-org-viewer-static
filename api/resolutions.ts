@@ -1,4 +1,4 @@
-import { kv } from './_lib/kv';
+import { kv, bumpSyncVersion } from './_lib/kv';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 interface Resolution {
@@ -16,6 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -49,6 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
 
       await kv.set(kvKey, data);
+      await bumpSyncVersion('global');
       return res.json({ success: true, savedCount: Object.keys(data).length });
     }
 

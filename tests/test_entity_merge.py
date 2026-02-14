@@ -281,24 +281,21 @@ class TestCombinedSnippets:
 
 
 class TestUnmerge:
-    """2c: Unmerge works without changes (verify existing code)."""
+    """2c: Unmerge via deleteEntityMergeFromKV (unmergeEntity was part of removed duplicates modal)."""
 
-    def test_unmerge_function_exists(self):
+    def test_delete_entity_merge_from_kv_exists(self):
         html = get_html()
-        assert 'function unmergeEntity' in html, "unmergeEntity function not found"
+        assert 'function deleteEntityMergeFromKV' in html, "deleteEntityMergeFromKV function not found"
 
-    def test_unmerge_deletes_record(self):
-        """unmergeEntity must delete the merge record."""
+    def test_delete_entity_merge_calls_api(self):
+        """deleteEntityMergeFromKV must call the merges API."""
         html = get_html()
-        match = re.search(r"function unmergeEntity\([^)]*\)\s*\{([\s\S]*?)\n\}", html)
-        assert match, "unmergeEntity not found"
+        match = re.search(r"function deleteEntityMergeFromKV\([^)]*\)\s*\{([\s\S]*?)\n\}", html)
+        assert match, "deleteEntityMergeFromKV not found"
         body = match.group(1)
-        assert 'delete entityMerges' in body, \
-            "unmergeEntity must delete from entityMerges"
+        assert 'merges' in body, \
+            "deleteEntityMergeFromKV must call merges API"
 
-    def test_unmerge_saves_to_kv(self):
+    def test_save_entity_merge_to_kv_exists(self):
         html = get_html()
-        match = re.search(r"function unmergeEntity\([^)]*\)\s*\{([\s\S]*?)\n\}", html)
-        assert match
-        assert 'deleteEntityMergeFromKV' in match.group(1), \
-            "unmergeEntity must call deleteEntityMergeFromKV"
+        assert 'function saveEntityMergeToKV' in html, "saveEntityMergeToKV function not found"
