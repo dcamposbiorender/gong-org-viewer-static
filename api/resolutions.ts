@@ -1,5 +1,6 @@
 import { kv, bumpSyncVersion } from './_lib/kv';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { validateAccount } from './_lib/validation';
 
 interface Resolution {
   choice: 'gong' | 'public';
@@ -50,7 +51,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
 
       await kv.set(kvKey, data);
-      await bumpSyncVersion('global');
+      // Bump per-account sync version if account provided (so client polling detects change)
+      const validation = validateAccount(req.query.account as string | undefined);
+      if (validation.isValid) {
+        await bumpSyncVersion(validation.account!);
+      }
       return res.json({ success: true, savedCount: Object.keys(data).length });
     }
 

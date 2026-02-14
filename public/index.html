@@ -64686,7 +64686,28 @@ async function saveManualMapModifications(company) {
   }
 }
 
-// Load Manual Map modifications (called on init, after loadGraduatedMaps)
+// Load manual map overlays from KV (user edits persisted server-side)
+async function loadManualMapsFromKV() {
+  const companies = Object.keys(MANUAL_DATA);
+  await Promise.all(companies.map(async (company) => {
+    try {
+      const response = await fetch(kvApiUrl('graduated-map', company));
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.root) {
+          MANUAL_DATA[company] = data;
+          console.log(`[ManualMaps] Loaded ${company} from KV`);
+        }
+      } else if (response.status === 404) {
+        console.log(`[ManualMaps] No KV data for ${company}, using embedded`);
+      }
+    } catch (e) {
+      console.warn(`[ManualMaps] KV fetch failed for ${company}:`, e.message);
+    }
+  }));
+}
+
+// Load Manual Map modifications (called on init, after loadManualMapsFromKV)
 function loadManualMapModifications() {
   const stored = localStorage.getItem('manualMapModifications');
   if (stored) {
@@ -65248,6 +65269,7 @@ function buildWorkingTree(node, parent = null) {
 }
 
 function findNodeById(node, id) {
+  if (!node) return null;
   if (node.id === id) return node;
   if (node.children) {
     for (const child of node.children) {
@@ -67979,7 +68001,9 @@ function toggleEvidence() {
   }
 }
 
-// Initialize
+// Initialize (async to await KV loads)
+(async () => {
+await loadManualMapsFromKV();
 loadSizeOverrides();
 loadMatchReviewState();
 loadFieldEdits();
@@ -68003,6 +68027,7 @@ if (savedMode === 'matchReview') {
 
 document.getElementById('companySelect').addEventListener('change', async e => {
   currentCompany = e.target.value;
+  lastKnownVersion = null; // Reset sync version for new company
   console.log('[CompanySelect] Changed to:', currentCompany, '- reloading KV data');
   // Reload fresh data from KV for the new company
   await Promise.all([
@@ -68188,7 +68213,7 @@ async function loadResolutions() {
 
   // Then try to fetch from Vercel API
   try {
-    const response = await fetch(`${VERCEL_API_BASE}/resolutions`);
+    const response = await fetch(`${VERCEL_API_BASE}/resolutions?account=${currentCompany.toLowerCase()}`);
     if (response.ok) {
       conflictResolutions = await response.json();
       localStorage.setItem('conflictResolutions', JSON.stringify(conflictResolutions));
@@ -68205,7 +68230,7 @@ async function saveResolution(key, resolution) {
 
   // Try to sync to Vercel
   try {
-    await fetch(`${VERCEL_API_BASE}/resolutions`, {
+    await fetch(`${VERCEL_API_BASE}/resolutions?account=${currentCompany.toLowerCase()}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, resolution })
@@ -68329,7 +68354,11 @@ async function saveCurrentResolution() {
   closeResolveModal();
 
   // Re-render to show resolved status
-  renderCompany(currentCompany);
+  if (currentMode === 'matchReview') {
+    renderMatchReview(currentCompany);
+  } else {
+    renderManualMapView();
+  }
 }
 
 // Event listeners for resolve modal
@@ -68447,10 +68476,17 @@ console.log('[Init] Autosave enabled (every 5 minutes)');
 // ============================================
 let lastKnownVersion = null;
 let syncPollTimer = null;
-let isEditing = false;
+
+function isModalOpen() {
+  const modals = document.querySelectorAll('[id$="Modal"]');
+  for (const m of modals) {
+    if (m.style.display === 'flex' || m.style.display === 'block') return true;
+  }
+  return false;
+}
 
 async function checkForUpdates() {
-  if (isEditing) return;
+  if (isModalOpen()) return;
   try {
     const response = await fetch(kvApiUrl('sync-version', currentCompany.toLowerCase()));
     if (!response.ok) return;
@@ -68486,6 +68522,7 @@ function startSyncPolling() {
 
 startSyncPolling();
 console.log('[Init] Sync polling started (every 10s)');
+})(); // end async init
 </script>
 
 </body>
