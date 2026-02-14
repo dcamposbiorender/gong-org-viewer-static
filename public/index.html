@@ -65220,6 +65220,7 @@ function formatDateShort(dateStr) {
 }
 
 function isInDateRange(dateStr, rangeStart, rangeEnd) {
+  if (!rangeStart || !rangeEnd) return true; // No range = show all
   const d = new Date(dateStr);
   return d >= new Date(rangeStart) && d <= new Date(rangeEnd);
 }
@@ -67843,9 +67844,12 @@ function showManualNodeEvidence(node) {
             ${s.gongUrl ? `<a href="${s.gongUrl}" class="snippet-link" target="_blank">↗ Gong</a>` : ''}
           </div>
           ${s.entityName ? `<div class="snippet-entity" style="font-size: 11px; color: #888; margin-top: 4px;">from: ${s.entityName}</div>` : ''}
+          ${s.contextBefore !== undefined ? `<button class="snippet-context-btn" onclick="showContextPopout(manualEvidenceSnippets, ${idx})">📄 Context</button>` : ''}
         </div>
       `;
     });
+    // Store snippets for context popout
+    window.manualEvidenceSnippets = snippets;
   }
 
   html += '</div>';
@@ -67892,6 +67896,9 @@ function renderManualMapView() {
     const workingRoot = buildManualMapWorkingTree(root);
     tree.appendChild(renderManualMapTree(workingRoot, 0));
   }
+
+  // Render table view (populated even if tree view is active, for when user switches)
+  renderTable(null, null);
 
   // Reset evidence panel
   document.getElementById('evidenceContent').innerHTML = '<div class="evidence-empty">Select a node to view evidence</div>';
@@ -68169,20 +68176,17 @@ document.querySelectorAll('.snippets-table th.sortable').forEach(th => {
     const key = th.dataset.sort;
     if (tableSortKey === key) tableSortAsc = !tableSortAsc;
     else { tableSortKey = key; tableSortAsc = true; }
-    const data = MANUAL_DATA[currentCompany] || DATA[currentCompany];
-    if (data?.dateRange) renderTable(getDateFromPercent(dateRange.start, data.dateRange), getDateFromPercent(dateRange.end, data.dateRange));
+    renderTable(null, null);
   });
 });
 
 // Table filters
 ['tableSearch', 'confidenceFilter', 'typeFilter'].forEach(id => {
   document.getElementById(id).addEventListener('input', () => {
-    const data = MANUAL_DATA[currentCompany] || DATA[currentCompany];
-    if (data?.dateRange) renderTable(getDateFromPercent(dateRange.start, data.dateRange), getDateFromPercent(dateRange.end, data.dateRange));
+    renderTable(null, null);
   });
   document.getElementById(id).addEventListener('change', () => {
-    const data = MANUAL_DATA[currentCompany] || DATA[currentCompany];
-    if (data?.dateRange) renderTable(getDateFromPercent(dateRange.start, data.dateRange), getDateFromPercent(dateRange.end, data.dateRange));
+    renderTable(null, null);
   });
 });
 
@@ -68492,8 +68496,9 @@ async function checkForUpdates() {
     if (!response.ok) return;
     const { version } = await response.json();
     if (lastKnownVersion !== null && version !== lastKnownVersion) {
-      console.log('[Sync] Version changed, reloading KV data...');
+      console.log('[Sync] Version changed from', lastKnownVersion, 'to', version, '- reloading KV data...');
       await Promise.all([
+        loadManualMapsFromKV(),
         loadSizeOverrides(),
         loadMatchReviewState(),
         loadFieldEdits(),
