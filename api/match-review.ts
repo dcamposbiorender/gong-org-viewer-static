@@ -1,4 +1,4 @@
-import { kv } from './_lib/kv';
+import { kv, bumpSyncVersion } from './_lib/kv';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateAccount } from './_lib/validation';
 
@@ -24,6 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -71,6 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         data[category][itemId] = decision;
 
         await kv.set(kvKey, data);
+        await bumpSyncVersion(account);
         return res.json({ success: true, category, itemId });
       }
 
@@ -86,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           manual: { ...existing.manual, ...(state.manual || {}) },
         };
         await kv.set(kvKey, merged);
+        await bumpSyncVersion(account);
         return res.json({
           success: true,
           counts: {
@@ -113,6 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       delete data.rejected[itemId];
       delete data.manual[itemId];
       await kv.set(kvKey, data);
+      await bumpSyncVersion(account);
       return res.json({ success: true, itemId });
     }
 

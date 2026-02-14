@@ -1,4 +1,4 @@
-import { kv } from './_lib/kv';
+import { kv, bumpSyncVersion } from './_lib/kv';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateAccount } from './_lib/validation';
 
@@ -20,6 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -59,6 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
 
       await kv.set(key, data);
+      await bumpSyncVersion(account);
       return res.json({ success: true, savedCount: Object.keys(data).length });
     }
 
@@ -72,6 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const data = await kv.get<OverridesMap>(key) || {};
       delete data[entityId];
       await kv.set(key, data);
+      await bumpSyncVersion(account);
       return res.json({ success: true, remainingCount: Object.keys(data).length });
     }
 

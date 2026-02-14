@@ -3,7 +3,8 @@
 Viewer Integration Script
 
 Converts enriched output files to the format expected by public/index.html
-and updates ALL data sections: DATA, MANUAL_DATA, MATCH_REVIEW_DATA, and dropdown.
+and updates data sections: MANUAL_DATA, MATCH_REVIEW_DATA, and dropdown.
+DATA is set to an empty stub (auto map used internally for enrichment only).
 
 Usage:
     python3 scripts/integrate_viewer.py --preview     # Show what would be updated
@@ -870,17 +871,21 @@ def update_viewer(data: Dict, manual_data: Dict, match_review: Dict):
       </select>'''
     content = re.sub(dropdown_pattern, new_dropdown, content, flags=re.DOTALL)
 
-    # 2. Update DATA section
-    print("  Updating DATA...")
+    # 2. Update DATA section (stub only — auto map data used for enrichment, not injected)
+    print("  Updating DATA (stub)...")
     data_start = content.find("const DATA = {")
     if data_start == -1:
         print("  ERROR: Could not find DATA")
         return False
     data_end = find_object_end(content, data_start)
     if data_end == -1:
-        print("  ERROR: Could not find end of DATA")
-        return False
-    data_replacement = f"const DATA = {json.dumps(data, indent=2)}"
+        # DATA is already a stub like "const DATA = {};"
+        data_end = content.find(";", data_start)
+        if data_end == -1:
+            print("  ERROR: Could not find end of DATA")
+            return False
+        data_end -= 1  # Point to the } before ;
+    data_replacement = "const DATA = {}"
     content = content[:data_start] + data_replacement + content[data_end + 1:]
 
     # 3. Update MANUAL_DATA section

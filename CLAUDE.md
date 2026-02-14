@@ -4,6 +4,8 @@
 
 Static org chart viewer. Extracts org structure from Gong call transcripts, displays for user review/correction.
 
+**Two modes**: Org Map (manual map) and Match Review. No auto map — removed Feb 2026.
+
 **Full architecture**: `docs/architecture.md`
 
 ---
@@ -21,6 +23,8 @@ batches_enriched/ → extract → extractions/ → consolidate → output/ → b
 | 3. Build Map | `build_true_auto_map.py` | `output/{co}_true_auto_map.json` |
 | 4. Integrate | `integrate_viewer.py` | `public/index.html` |
 
+**Note:** `build_true_auto_map.py` still runs — its output is used to enrich MANUAL_DATA with Gong evidence and to generate MATCH_REVIEW_DATA. But the auto map is NOT injected into the viewer (`DATA = {}` stub).
+
 ---
 
 ## Critical Field Mappings (Why Things Break)
@@ -36,47 +40,67 @@ batches_enriched/ → extract → extractions/ → consolidate → output/ → b
 | Speaker | `speaker_id` | `customerName`/`internalName` |
 
 **Extraction formats differ by company:**
-- GSK/AZ/Novartis: `value`, `type`, `speaker_id` ✅
-- AbbVie/others: `entity_name`, `entity_type`, NO `speaker_id` ❌
+- GSK/AZ/Novartis: `value`, `type`, `speaker_id`
+- AbbVie/others: `entity_name`, `entity_type`, NO `speaker_id`
 
 ---
 
 ## Viewer Data Structure
 
 ```javascript
-DATA[company] = {
-  root: {
-    id, name, type,
-    leader: { name, title } | null,
-    size: string | null,
-    sizeMentions: [{ value, snippetIndex, source: { callDate, customerName }}],
-    snippets: [{ quote, date, callId, gongUrl, customerName, internalName }],
-    children: [/* recursive */]
-  }
-}
+// DATA is an empty stub (auto map removed)
+DATA = {}
 
 MANUAL_DATA[company] = {
+  company: "Display Name",
+  source: "Manual Map - Display Name",
+  stats: { entities, matched, snippets },
   root: {
     id, name, type, leader,
     gongEvidence: { snippets, sizeMentions, matchedContacts, totalMentions },
     children: [/* recursive */]
   }
 }
+
+MATCH_REVIEW_DATA = {
+  generated: "ISO timestamp",
+  companies: {
+    [company]: {
+      total_unmatched: N,
+      items: [{ id, gong_entity, snippet, llm_suggested_match, ... }]
+    }
+  }
+}
 ```
 
 ---
 
-## Known Pipeline Bugs
+## Multi-User Sync
 
-| Issue | Cause | Status |
-|-------|-------|--------|
-| ~~Speaker shows as number~~ | ~~`build_true_auto_map.py` drops `speaker_id`~~ | ✅ Fixed (v5 prompt + pipeline) |
-| ~~No leaders in Auto~~ | ~~Extraction doesn't capture "X leads Y"~~ | ✅ Fixed (v5 prompt extracts leaders) |
-| Size shows "no source" | Size extracted but not linked to snippet | Open |
+The viewer uses 10-second polling for multi-user sync (1-3 users):
 
-### v5 Extraction Stats (2026-01-29)
-- **speakerId**: 100% coverage (1531/1531 snippets)
-- **leaders**: 43 found across all companies
+1. Every KV write bumps `sync-version:{account}` key (except autosave)
+2. Client polls `/api/sync-version` every 10 seconds
+3. On version change → reload all KV data, re-render current view
+4. `Cache-Control: no-store` on all API responses
+
+---
+
+## APIs (Vercel KV)
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/api/corrections` | Hierarchy overrides |
+| `/api/field-edits` | Name/title edits |
+| `/api/match-review` | Match decisions |
+| `/api/merges` | Entity consolidation |
+| `/api/graduated-map` | Manual map persistence (KV overlay) |
+| `/api/sizes` | Team size overrides |
+| `/api/resolutions` | Gong vs public data conflicts |
+| `/api/autosave` | Session state snapshots |
+| `/api/sync-version` | Multi-user sync version polling |
+
+All endpoints: CORS enabled, `Cache-Control: no-store`, account validation via `?account=` param.
 
 ---
 
@@ -86,10 +110,11 @@ MANUAL_DATA[company] = {
 |---------|----------|
 | Source transcripts | `batches_enriched/{co}/batch_*.json` |
 | Raw extractions | `extractions/{co}/entities_llm_v2.json` |
-| Final auto map | `output/{co}_true_auto_map.json` |
-| Manual maps | `Manual Maps Jan 26 2026/{co}_rd_map.json` |
+| Auto map (pipeline intermediate) | `output/{co}_true_auto_map.json` |
+| Manual maps (source) | `Manual Maps Jan 26 2026/{co}_rd_map.json` |
 | Viewer | `public/index.html` |
-| Participants CSV | Referenced in `build_true_auto_map.py` |
+| KV config | `api/_lib/kv.ts` |
+| Account validation | `api/_lib/validation.ts` |
 
 ---
 
@@ -108,19 +133,8 @@ vercel
 ## Viewer Display Rules
 
 - **Leader**: Shows `node.leader.name` or "?, ?" placeholder
-- **Size**: First `sizeMentions[].value` or `node.size`. Shows "⚠ no source" if size but no mentions
+- **Size**: First `sizeMentions[].value` or `node.size`. Shows "no source" if size but no mentions
 - **Snippets**: Filtered by date range, shows quote + customerName + gongUrl link
-
----
-
-## APIs (Vercel KV)
-
-| Endpoint | Purpose |
-|----------|---------|
-| `/api/corrections` | Hierarchy overrides |
-| `/api/field-edits` | Name/title edits |
-| `/api/match-review` | Match decisions |
-| `/api/merges` | Entity consolidation |
 
 ---
 
