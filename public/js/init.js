@@ -107,17 +107,28 @@ document.getElementById('changesModal').addEventListener('click', (e) => {
 const startSlider = document.getElementById('startSlider');
 const endSlider = document.getElementById('endSlider');
 
+let _sliderDebounce;
 function updateSliders() {
   const start = Math.min(parseInt(startSlider.value), parseInt(endSlider.value) - 5);
   const end = Math.max(parseInt(endSlider.value), parseInt(startSlider.value) + 5);
   startSlider.value = start;
   endSlider.value = end;
   dateRange = { start, end };
-  if (currentMode === 'manual') {
-    renderManualMapView();
-  } else {
-    renderCompany(currentCompany);
+  // Update date labels immediately (cheap)
+  const data = MANUAL_DATA[currentCompany] || DATA[currentCompany];
+  if (data?.dateRange) {
+    document.getElementById('startDate').textContent = formatDateShort(getDateFromPercent(start, data.dateRange));
+    document.getElementById('endDate').textContent = formatDateShort(getDateFromPercent(end, data.dateRange));
   }
+  // Debounce the expensive re-render
+  clearTimeout(_sliderDebounce);
+  _sliderDebounce = setTimeout(() => {
+    if (currentMode === 'manual') {
+      renderManualMapView();
+    } else {
+      renderCompany(currentCompany);
+    }
+  }, 100);
 }
 
 startSlider.addEventListener('input', updateSliders);
@@ -151,13 +162,7 @@ if (currentMode === 'matchReview') {
   setMode('manual');
 }
 
-// Resolve modal event listeners
-document.getElementById('resolveModalClose').addEventListener('click', closeResolveModal);
-document.getElementById('resolveCancel').addEventListener('click', closeResolveModal);
-document.getElementById('resolveSave').addEventListener('click', saveCurrentResolution);
-document.getElementById('resolveModal').addEventListener('click', (e) => {
-  if (e.target.id === 'resolveModal') closeResolveModal();
-});
+// Resolve modal listeners are registered in conflict-resolution.js (not duplicated here)
 
 // Start autosave timer
 setInterval(performAutosave, AUTOSAVE_INTERVAL);
@@ -183,27 +188,6 @@ window.addEventListener('beforeunload', () => {
     JSON.stringify({ state })
   );
 
-  // Also save graduated map data if it exists
-  const graduatedMaps = JSON.parse(localStorage.getItem('graduatedMaps') || '{}');
-  if (graduatedMaps[currentCompany] && MANUAL_DATA[currentCompany]) {
-    // P0 FIX: Strip contextBefore/contextAfter from graduated-map payload
-    // to keep sendBeacon payload under 64KB limit
-    const mapCopy = JSON.parse(JSON.stringify(MANUAL_DATA[currentCompany]));
-    function stripContext(node) {
-      if (node.gongEvidence && node.gongEvidence.snippets) {
-        node.gongEvidence.snippets.forEach(s => {
-          delete s.contextBefore;
-          delete s.contextAfter;
-        });
-      }
-      if (node.children) node.children.forEach(stripContext);
-    }
-    if (mapCopy.root) stripContext(mapCopy.root);
-    navigator.sendBeacon(
-      kvApiUrl('graduated-map', currentCompany),
-      JSON.stringify({ map: mapCopy })
-    );
-  }
 });
 
 console.log('[Init] Autosave enabled (every 5 minutes)');

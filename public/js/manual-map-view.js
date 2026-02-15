@@ -100,12 +100,14 @@ function renderManualMapTree(node, level = 0) {
   // Drag events for Manual Map
   nodeEl.addEventListener('dragstart', (e) => {
     draggedNodeId = node.id;
+    _cachedDragTree = buildManualMapWorkingTree(MANUAL_DATA[currentCompany].root);
     nodeEl.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
   });
 
   nodeEl.addEventListener('dragend', () => {
     draggedNodeId = null;
+    _cachedDragTree = null;
     nodeEl.classList.remove('dragging');
     document.querySelectorAll('.drag-over, .drag-invalid').forEach(el => el.classList.remove('drag-over', 'drag-invalid'));
   });
@@ -113,8 +115,8 @@ function renderManualMapTree(node, level = 0) {
   nodeEl.addEventListener('dragover', (e) => {
     e.preventDefault();
     if (!draggedNodeId || draggedNodeId === node.id) return;
-    const workingTree = buildManualMapWorkingTree(MANUAL_DATA[currentCompany].root);
-    if (isManualMapDescendant(draggedNodeId, node.id, workingTree)) {
+    const tree = _cachedDragTree || buildManualMapWorkingTree(MANUAL_DATA[currentCompany].root);
+    if (isManualMapDescendant(draggedNodeId, node.id, tree)) {
       nodeEl.classList.add('drag-invalid');
       nodeEl.classList.remove('drag-over');
     } else {
@@ -129,8 +131,8 @@ function renderManualMapTree(node, level = 0) {
     e.preventDefault();
     nodeEl.classList.remove('drag-over', 'drag-invalid');
     if (!draggedNodeId || draggedNodeId === node.id) return;
-    const workingTree = buildManualMapWorkingTree(MANUAL_DATA[currentCompany].root);
-    if (isManualMapDescendant(draggedNodeId, node.id, workingTree)) return;
+    const tree = _cachedDragTree || buildManualMapWorkingTree(MANUAL_DATA[currentCompany].root);
+    if (isManualMapDescendant(draggedNodeId, node.id, tree)) return;
 
     const newOverride = {
       originalParent: getManualMapOriginalParentName(draggedNodeId),

@@ -3,7 +3,7 @@
 async function loadOverrides(rerender = false) {
   // Load localStorage first as cache
   const stored = localStorage.getItem('orgChartOverrides');
-  if (stored) overrides = JSON.parse(stored);
+  if (stored) overrides = safeJsonParse(stored, {});
 
   // Then try to fetch from Vercel KV and merge (KV takes precedence)
   try {
@@ -28,7 +28,7 @@ async function loadOverrides(rerender = false) {
 // Load size overrides from localStorage and Vercel KV
 async function loadSizeOverrides() {
   const stored = localStorage.getItem('sizeOverrides');
-  if (stored) sizeOverrides = JSON.parse(stored);
+  if (stored) sizeOverrides = safeJsonParse(stored, {});
 
   // Fetch from Vercel KV and merge (KV takes precedence)
   try {
@@ -118,7 +118,7 @@ async function deleteSizeOverrideFromKV(account, key, isRetry = false) {
 
 async function loadFieldEdits() {
   const stored = localStorage.getItem('fieldEdits');
-  if (stored) fieldEdits = JSON.parse(stored);
+  if (stored) fieldEdits = safeJsonParse(stored, {});
 
   try {
     const response = await fetch(`/api/field-edits?account=${currentCompany.toLowerCase()}`);
@@ -197,8 +197,8 @@ function getFieldValue(node, fieldName) {
 
 // Start editing a node
 
-async function loadManualMapsFromKV() {
-  const companies = Object.keys(MANUAL_DATA);
+async function loadManualMapsFromKV(onlyCompany) {
+  const companies = onlyCompany ? [onlyCompany] : Object.keys(MANUAL_DATA);
   await Promise.all(companies.map(async (company) => {
     try {
       const response = await fetch(kvApiUrl('graduated-map', company));
@@ -209,7 +209,7 @@ async function loadManualMapsFromKV() {
           console.log(`[ManualMaps] Loaded ${company} from KV`);
         }
       } else if (response.status === 404) {
-        console.log(`[ManualMaps] No KV data for ${company}, using embedded`);
+        // No KV data for this company, use embedded data
       }
     } catch (e) {
       console.warn(`[ManualMaps] KV fetch failed for ${company}:`, e.message);
@@ -221,7 +221,7 @@ async function loadManualMapsFromKV() {
 function loadManualMapModifications() {
   const stored = localStorage.getItem('manualMapModifications');
   if (stored) {
-    manualMapModifications = JSON.parse(stored);
+    manualMapModifications = safeJsonParse(stored, {});
   }
 }
 
@@ -294,7 +294,7 @@ function saveManualMapOverrides() {
 // Load Manual Map overrides from localStorage
 function loadManualMapOverrides() {
   const stored = localStorage.getItem('manualMapOverrides');
-  if (stored) manualMapOverrides = JSON.parse(stored);
+  if (stored) manualMapOverrides = safeJsonParse(stored, {});
 }
 
 // ===== ENTITY MERGES (Duplicate Leader Handling) =====
@@ -306,7 +306,7 @@ async function loadEntityMerges() {
   entityMerges = {};
 
   const stored = localStorage.getItem('entityMerges:' + currentCompany.toLowerCase());
-  if (stored) entityMerges = JSON.parse(stored);
+  if (stored) entityMerges = safeJsonParse(stored, {});
 
   try {
     const response = await fetch(kvApiUrl('merges', currentCompany));
@@ -412,7 +412,7 @@ async function deleteOverrideFromKV(account, entityId, isRetry = false) {
 async function loadMatchReviewState() {
   const stored = localStorage.getItem('matchReviewState');
   if (stored) {
-    matchReviewState = JSON.parse(stored);
+    matchReviewState = safeJsonParse(stored, {});
   }
 
   // Fetch from Vercel KV per company

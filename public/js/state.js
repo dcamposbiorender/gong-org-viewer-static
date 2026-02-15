@@ -24,6 +24,9 @@ let entityMerges = {};
 // Manual Map overrides state: { nodeId: { originalParent, newParent, newParentName, movedAt } }
 let manualMapOverrides = {};
 
+// Cached working tree for drag operations (avoids rebuilding on every dragover)
+let _cachedDragTree = null;
+
 // Get resolution key for a conflict
 function getResolutionKey(company, entityId, leaderName) {
   return `${company}:${entityId}:${leaderName}`.toLowerCase();

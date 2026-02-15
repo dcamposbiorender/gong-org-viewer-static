@@ -98,7 +98,24 @@ function convertToManualMapNode(node, level = 0) {
 
 // Helper to get all size mentions for a Manual Map node (including approved matches)
 
-function buildWorkingTree(node, parent = null) {
+// Build a Map<nodeId, node> for O(1) lookups (avoids O(n) findNodeById per call)
+function buildNodeIndex(root) {
+  const index = new Map();
+  function walk(node) {
+    if (node?.id) index.set(node.id, node);
+    if (node?.children) node.children.forEach(walk);
+  }
+  walk(root);
+  return index;
+}
+
+function buildWorkingTree(node, parent = null, _nodeIndex = null) {
+  // Build index once at top-level call, reuse for all recursive calls
+  if (!_nodeIndex) {
+    const root = DATA[currentCompany]?.root;
+    _nodeIndex = root ? buildNodeIndex(root) : new Map();
+  }
+
   const clone = { ...node, originalParent: parent?.id || null, children: [] };
   const override = overrides[node.id];
   if (override) clone.override = override;
@@ -106,16 +123,16 @@ function buildWorkingTree(node, parent = null) {
   if (node.children) {
     node.children.forEach(child => {
       if (!overrides[child.id] || overrides[child.id].newParent === node.id) {
-        clone.children.push(buildWorkingTree(child, node));
+        clone.children.push(buildWorkingTree(child, node, _nodeIndex));
       }
     });
   }
 
   Object.entries(overrides).forEach(([nodeId, ov]) => {
     if (ov.newParent === node.id && nodeId !== node.id) {
-      const movedNode = findNodeById(DATA[currentCompany]?.root, nodeId);
+      const movedNode = _nodeIndex.get(nodeId);
       if (movedNode) {
-        const movedClone = buildWorkingTree(movedNode, node);
+        const movedClone = buildWorkingTree(movedNode, node, _nodeIndex);
         movedClone.override = ov;
         clone.children.push(movedClone);
       }
@@ -126,12 +143,11 @@ function buildWorkingTree(node, parent = null) {
   if (entityMerges[node.id]) {
     const merge = entityMerges[node.id];
     for (const absorbedId of (merge.absorbed || [])) {
-      const absorbedNode = findNodeById(DATA[currentCompany]?.root, absorbedId);
+      const absorbedNode = _nodeIndex.get(absorbedId);
       if (absorbedNode?.children) {
         absorbedNode.children.forEach(child => {
-          // Only add if not already moved by a correction override
           if (!overrides[child.id]) {
-            clone.children.push(buildWorkingTree(child, node));
+            clone.children.push(buildWorkingTree(child, node, _nodeIndex));
           }
         });
       }

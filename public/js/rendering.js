@@ -630,21 +630,23 @@ function renderTree(node, level = 0, rangeStart, rangeEnd) {
   // Drag events
   nodeEl.addEventListener('dragstart', (e) => {
     draggedNodeId = node.id;
+    _cachedDragTree = buildWorkingTree(DATA[currentCompany]?.root);
     nodeEl.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
   });
-  
+
   nodeEl.addEventListener('dragend', () => {
     draggedNodeId = null;
+    _cachedDragTree = null;
     nodeEl.classList.remove('dragging');
     document.querySelectorAll('.drag-over, .drag-invalid').forEach(el => el.classList.remove('drag-over', 'drag-invalid'));
   });
-  
+
   nodeEl.addEventListener('dragover', (e) => {
     e.preventDefault();
     if (!draggedNodeId || draggedNodeId === node.id) return;
-    const workingTree = buildWorkingTree(DATA[currentCompany]?.root);
-    if (isDescendant(draggedNodeId, node.id, workingTree)) {
+    const tree = _cachedDragTree || buildWorkingTree(DATA[currentCompany]?.root);
+    if (isDescendant(draggedNodeId, node.id, tree)) {
       nodeEl.classList.add('drag-invalid');
       nodeEl.classList.remove('drag-over');
     } else {
@@ -652,15 +654,15 @@ function renderTree(node, level = 0, rangeStart, rangeEnd) {
       nodeEl.classList.remove('drag-invalid');
     }
   });
-  
+
   nodeEl.addEventListener('dragleave', () => nodeEl.classList.remove('drag-over', 'drag-invalid'));
-  
+
   nodeEl.addEventListener('drop', (e) => {
     e.preventDefault();
     nodeEl.classList.remove('drag-over', 'drag-invalid');
     if (!draggedNodeId || draggedNodeId === node.id) return;
-    const workingTree = buildWorkingTree(DATA[currentCompany]?.root);
-    if (isDescendant(draggedNodeId, node.id, workingTree)) return;
+    const tree = _cachedDragTree || buildWorkingTree(DATA[currentCompany]?.root);
+    if (isDescendant(draggedNodeId, node.id, tree)) return;
     
     const newOverride = {
       originalParent: getOriginalParentName(draggedNodeId),
@@ -684,16 +686,10 @@ function renderTree(node, level = 0, rangeStart, rangeEnd) {
     childrenEl.className = 'children' + (node.children.length > 1 ? ' multi' : '');
     
     if (node.children.length > 1) {
-      setTimeout(() => {
-        const first = childrenEl.firstElementChild;
-        const last = childrenEl.lastElementChild;
-        if (first && last) {
-          const firstRect = first.getBoundingClientRect();
-          const lastRect = last.getBoundingClientRect();
-          const hw = ((lastRect.left + lastRect.width/2) - (firstRect.left + firstRect.width/2)) / 2;
-          childrenEl.style.setProperty('--half-width', hw + 'px');
-        }
-      }, 0);
+      // Queue layout measurement — collected and batched in a single rAF
+      // (see _pendingConnectorMeasurements in renderCompany/renderManualMapView)
+      if (!window._pendingConnectorMeasurements) window._pendingConnectorMeasurements = [];
+      window._pendingConnectorMeasurements.push(childrenEl);
     }
     
     node.children.forEach(child => childrenEl.appendChild(renderTree(child, level + 1, rangeStart, rangeEnd)));
@@ -1306,7 +1302,8 @@ function renderCompany(companyKey) {
   const tree = document.getElementById('tree');
   tree.innerHTML = '';
   tree.appendChild(renderTree(workingTree, 0, rangeStart, rangeEnd));
-  
+  flushConnectorMeasurements();
+
   // Render table
   renderTable(rangeStart, rangeEnd);
   

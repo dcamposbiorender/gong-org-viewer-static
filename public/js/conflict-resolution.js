@@ -62,7 +62,7 @@ async function loadResolutions() {
   // Try localStorage first as cache
   const cached = localStorage.getItem('conflictResolutions');
   if (cached) {
-    conflictResolutions = JSON.parse(cached);
+    conflictResolutions = safeJsonParse(cached, {});
   }
 
   // Then try to fetch from Vercel API

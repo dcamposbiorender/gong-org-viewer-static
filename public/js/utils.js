@@ -1,5 +1,11 @@
 // Pure utility functions
 
+// Safe JSON parse with fallback — prevents app crash on corrupted localStorage
+function safeJsonParse(str, fallback = null) {
+  try { return JSON.parse(str); }
+  catch (e) { console.warn('[safeJsonParse] Failed:', e.message); return fallback; }
+}
+
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
@@ -69,6 +75,27 @@ function boldSizeMentions(text) {
 
 // Show evidence for manual node
 // Get approved match items for a manual node
+
+// Batch all pending connector width measurements in a single rAF (avoids layout thrashing)
+function flushConnectorMeasurements() {
+  requestAnimationFrame(() => {
+    const pending = window._pendingConnectorMeasurements || [];
+    window._pendingConnectorMeasurements = [];
+    // Batch all reads first
+    const measurements = pending.map(el => {
+      const first = el.firstElementChild;
+      const last = el.lastElementChild;
+      if (first && last) {
+        const firstRect = first.getBoundingClientRect();
+        const lastRect = last.getBoundingClientRect();
+        return { el, hw: ((lastRect.left + lastRect.width/2) - (firstRect.left + firstRect.width/2)) / 2 };
+      }
+      return null;
+    }).filter(Boolean);
+    // Then batch all writes
+    measurements.forEach(({ el, hw }) => el.style.setProperty('--half-width', hw + 'px'));
+  });
+}
 
 function isModalOpen() {
   const modals = document.querySelectorAll('[id$="Modal"]');

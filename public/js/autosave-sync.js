@@ -31,20 +31,6 @@ async function performAutosave() {
       failed = true;
     }
 
-    // Also save graduated map data if it exists
-    const graduatedMaps = JSON.parse(localStorage.getItem('graduatedMaps') || '{}');
-    if (graduatedMaps[currentCompany] && MANUAL_DATA[currentCompany]) {
-      const mapResp = await fetch(kvApiUrl('graduated-map', currentCompany), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ map: MANUAL_DATA[currentCompany] })
-      });
-      if (!mapResp.ok) {
-        console.error('[Autosave] Graduated map save failed:', mapResp.status);
-        failed = true;
-      }
-    }
-
     if (failed) {
       showToast('Autosave partially failed - some data saved locally only', 'error');
     } else {
@@ -60,6 +46,7 @@ let lastKnownVersion = null;
 let syncPollTimer = null;
 
 async function checkForUpdates() {
+  if (document.hidden) return;
   if (isModalOpen()) return;
   try {
     const response = await fetch(kvApiUrl('sync-version', currentCompany.toLowerCase()));
@@ -68,7 +55,7 @@ async function checkForUpdates() {
     if (lastKnownVersion !== null && version !== lastKnownVersion) {
       console.log('[Sync] Version changed from', lastKnownVersion, 'to', version, '- reloading KV data...');
       await Promise.all([
-        loadManualMapsFromKV(),
+        loadManualMapsFromKV(currentCompany),
         loadSizeOverrides(),
         loadMatchReviewState(),
         loadFieldEdits(),

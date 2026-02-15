@@ -182,11 +182,6 @@ document.addEventListener('click', (e) => {
 function renderMatchReview(company) {
   // Fallback to currentCompany if not provided (for backward compat with event handlers)
   const targetCompany = company || currentCompany;
-  console.log('[MatchReview] === RENDER START ===');
-  console.log('[MatchReview] Param company:', company);
-  console.log('[MatchReview] Global currentCompany:', currentCompany);
-  console.log('[MatchReview] Using targetCompany:', targetCompany);
-  console.trace('[MatchReview] Call stack:');
 
   const mrTotalCount = document.getElementById('mrTotalCount');
   const mrWithSuggestions = document.getElementById('mrWithSuggestions');
@@ -196,7 +191,7 @@ function renderMatchReview(company) {
 
   // Check if data exists for this company
   if (!hasMatchReviewData(targetCompany)) {
-    console.log('[MatchReview] No data for company:', targetCompany);
+    // No match review data for this company
     mrTotalCount.textContent = '0';
     mrWithSuggestions.textContent = '0';
     mrApprovedCount.textContent = '0';
@@ -215,7 +210,6 @@ function renderMatchReview(company) {
   // Get data
   const data = MATCH_REVIEW_DATA.companies[targetCompany];
   const items = data.items || [];
-  console.log('[MatchReview] Found', items.length, 'items for', targetCompany);
 
   // Get filter values
   const searchFilter = document.getElementById('mrSearchFilter').value.toLowerCase();
@@ -259,7 +253,6 @@ function renderMatchReview(company) {
   mrWithSuggestions.textContent = data.total_with_suggestions || 0;
   mrApprovedCount.textContent = approved + manual;
   mrRejectedCount.textContent = rejected;
-  console.log('[MatchReview] Stats updated:', items.length, data.total_with_suggestions, 'for', targetCompany);
 
   // Get manual map options
   const manualOptions = getManualMapOptions(targetCompany);
@@ -337,7 +330,6 @@ function renderMatchReview(company) {
     `;
   }).join('');
 
-  console.log('[MatchReview] Rendered', filteredItems.length, 'rows for', targetCompany);
 }
 
 // Render manual map tree (horizontal layout matching Auto mode)
