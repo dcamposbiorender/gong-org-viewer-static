@@ -10,68 +10,51 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 
 
-def extract_js_object(html_content: str, var_name: str) -> dict:
+def extract_js_object(html_content_or_path: str, var_name: str) -> dict:
     """
-    Extract a JavaScript object/dict from HTML content.
-    Looks for patterns like: const VAR_NAME = { ... };
-    """
-    # Pattern to find the variable declaration and capture the JSON object
-    # Handle both const and let declarations
-    pattern = rf'(?:const|let)\s+{var_name}\s*=\s*(\{{)'
+    Extract a JavaScript object from a standalone JS file.
 
-    match = re.search(pattern, html_content)
+    Reads from public/js/ files based on var_name:
+      DATA           -> public/js/data.js
+      MANUAL_DATA    -> public/js/manual-data.js
+      MATCH_REVIEW_DATA -> public/js/match-review-data.js
+
+    The html_content_or_path parameter is ignored (kept for backward compat).
+    """
+    js_file_map = {
+        'DATA': 'data.js',
+        'MANUAL_DATA': 'manual-data.js',
+        'MATCH_REVIEW_DATA': 'match-review-data.js',
+    }
+
+    filename = js_file_map.get(var_name)
+    if not filename:
+        raise ValueError(f"Unknown variable name: {var_name}")
+
+    js_path = PROJECT_ROOT / 'public' / 'js' / filename
+    if not js_path.exists():
+        raise FileNotFoundError(
+            f"Data file not found: {js_path}. "
+            f"Run: python3 scripts/integrate_viewer.py --update"
+        )
+
+    content = js_path.read_text()
+
+    # Strip the "const VAR_NAME = " prefix and trailing ";\n"
+    pattern = rf'(?:const|let)\s+{var_name}\s*=\s*'
+    match = re.search(pattern, content)
     if not match:
-        raise ValueError(f"Could not find variable {var_name} in HTML")
+        raise ValueError(f"Could not find {var_name} in {js_path}")
 
-    start_idx = match.start(1)
+    json_str = content[match.end():].rstrip().rstrip(';')
 
-    # Find the matching closing brace by counting braces
-    brace_count = 0
-    end_idx = start_idx
-    in_string = False
-    escape_next = False
-    string_char = None
-
-    for i, char in enumerate(html_content[start_idx:], start=start_idx):
-        if escape_next:
-            escape_next = False
-            continue
-
-        if char == '\\':
-            escape_next = True
-            continue
-
-        if char in '"\'`' and not in_string:
-            in_string = True
-            string_char = char
-            continue
-
-        if in_string and char == string_char:
-            in_string = False
-            string_char = None
-            continue
-
-        if not in_string:
-            if char == '{':
-                brace_count += 1
-            elif char == '}':
-                brace_count -= 1
-                if brace_count == 0:
-                    end_idx = i + 1
-                    break
-
-    json_str = html_content[start_idx:end_idx]
-
-    # Clean up JavaScript-specific syntax for JSON parsing
     # Remove trailing commas before } or ]
     json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
 
     try:
         return json.loads(json_str)
     except json.JSONDecodeError as e:
-        # If JSON parsing fails, try a more aggressive cleanup
-        # This handles cases with JS comments or unquoted keys
-        raise ValueError(f"Failed to parse {var_name} as JSON: {e}")
+        raise ValueError(f"Failed to parse {var_name} from {js_path}: {e}")
 
 
 def collect_all_nodes(node: dict, nodes: list = None) -> list:

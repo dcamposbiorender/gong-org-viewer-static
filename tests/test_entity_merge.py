@@ -10,8 +10,20 @@ INDEX_HTML_PATH = PROJECT_ROOT / 'public' / 'index.html'
 
 
 def get_html():
-    """Read index.html content."""
-    return INDEX_HTML_PATH.read_text(encoding='utf-8')
+    """Read index.html + all JS module files.
+
+    After modularization, JS code lives in public/js/*.js files
+    instead of inline in index.html. This function concatenates
+    them all so existing regex-based tests still work.
+    """
+    html = INDEX_HTML_PATH.read_text(encoding='utf-8')
+    js_dir = PROJECT_ROOT / 'public' / 'js'
+    for js_file in sorted(js_dir.glob('*.js')):
+        # Skip data files (gitignored, pipeline-generated)
+        if js_file.name in ('data.js', 'manual-data.js', 'match-review-data.js'):
+            continue
+        html += '\n' + js_file.read_text(encoding='utf-8')
+    return html
 
 
 # --- Phase 1 Tests ---

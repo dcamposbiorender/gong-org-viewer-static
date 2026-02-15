@@ -19,7 +19,7 @@ graph TD
     H["Manual Maps<br/>Manual Maps Jan 26 2026/"] --> I["Integrate Viewer<br/>integrate_viewer.py"]
     G --> I
     J["Participants CSV"] --> F
-    I --> K["public/index.html<br/>MANUAL_DATA, MATCH_REVIEW_DATA<br/>(DATA = {} stub)"]
+    I --> K["public/js/<br/>data.js, manual-data.js,<br/>match-review-data.js"]
 ```
 
 ---
@@ -31,7 +31,7 @@ graph TD
 | 1. Extract | `extract_*.py` | batches_enriched/ | entities_llm_v2.json | Transcript → entities |
 | 2. Consolidate | `consolidate_with_hierarchy.py` | entities_llm_v2.json | consolidated_with_hierarchy.json | Dedupe, infer parents |
 | 3. Build Map | `build_true_auto_map.py` | consolidated + CSV | _true_auto_map.json | Tree structure, resolve speakers |
-| 4. Integrate | `integrate_viewer.py` | auto_map + manual_map | index.html | snake_case → camelCase |
+| 4. Integrate | `integrate_viewer.py` | auto_map + manual_map | `public/js/*.js` data files | snake_case → camelCase |
 
 ---
 
@@ -47,7 +47,26 @@ GongOrgViewerStatic/
 │   ├── {company}_enriched_auto_map.json       # LEGACY (deprecated)
 │   └── {company}_enriched_match_review_data.json
 ├── "Manual Maps Jan 26 2026"/{company}_rd_map.json
-└── public/index.html                          # Viewer with embedded data
+└── public/
+    ├── index.html                              # HTML shell + script tags (407 lines)
+    ├── css/styles.css                          # Extracted CSS (1,866 lines)
+    └── js/
+        ├── data.js                             # DATA stub (gitignored, pipeline-generated)
+        ├── manual-data.js                      # MANUAL_DATA (gitignored, pipeline-generated)
+        ├── match-review-data.js                # MATCH_REVIEW_DATA (gitignored, pipeline-generated)
+        ├── state.js                            # Global state vars + kvApiUrl
+        ├── utils.js                            # escapeHtml, formatDateShort, showToast, etc.
+        ├── tree-ops.js                         # buildWorkingTree, findNodeById, countNodes
+        ├── kv-api.js                           # All KV load/save/delete operations
+        ├── rendering.js                        # renderTree, renderTable, selectNode, edits, CRUD
+        ├── evidence.js                         # showSnippetContext, showManualNodeEvidence
+        ├── match-review.js                     # renderMatchReview, approve/reject/manual
+        ├── manage-entities.js                  # Create/delete entities modal
+        ├── entity-merge.js                     # Merge tab + alias management
+        ├── manual-map-view.js                  # renderManualMapTree, renderManualMapView
+        ├── conflict-resolution.js              # Resolve modal, verification conflicts
+        ├── autosave-sync.js                    # performAutosave, sync polling
+        └── init.js                             # Async IIFE: KV loads, event binding, startup
 ```
 
 ---

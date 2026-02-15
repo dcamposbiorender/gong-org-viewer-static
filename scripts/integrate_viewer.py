@@ -358,11 +358,6 @@ def build_auto_entity_lookup(enriched_root: Dict) -> Dict[str, Dict]:
     return lookup
 
 
-# Backwards compatibility alias
-def build_snippet_lookup(enriched_root: Dict) -> Dict[str, list]:
-    """Deprecated: Use build_auto_entity_lookup instead."""
-    full_lookup = build_auto_entity_lookup(enriched_root)
-    return {k: v.get("snippets", []) for k, v in full_lookup.items()}
 
 
 def count_snippets(node: Dict) -> int:
@@ -753,13 +748,6 @@ def convert_manual_map_to_viewer(company: str, manual_map: Dict, enriched_map: D
 
 
 
-def generate_dropdown_html() -> str:
-    """Generate the dropdown HTML for company selector."""
-    options = []
-    for company in COMPANIES:
-        display_name = COMPANY_DISPLAY_NAMES.get(company, company.title())
-        options.append(f'        <option value="{company}">{display_name} ▾</option>')
-    return '\n'.join(options)
 
 
 def generate_viewer_data() -> tuple:
@@ -790,8 +778,9 @@ def generate_viewer_data() -> tuple:
             print(f"    DATA: {data[company]['stats']['entities']} entities, {data[company]['stats']['snippets']} snippets")
 
         if manual_map:
-            # Pass enriched_map to merge snippets into manual map nodes
-            manual_data[company] = convert_manual_map_to_viewer(company, manual_map, enriched_map)
+            # Pass enriched DATA root (has contextBefore on snippets) instead of raw auto map
+            enriched_data_for_manual = data.get(company) if data.get(company) else enriched_map
+            manual_data[company] = convert_manual_map_to_viewer(company, manual_map, enriched_data_for_manual)
             # Use stats from conversion
             stats = manual_data[company].get("stats", {})
             print(f"    MANUAL_DATA: {stats.get('entities', 0)} entities, {stats.get('matched', 0)} matched, {stats.get('snippets', 0)} snippets")
@@ -825,110 +814,35 @@ def export_json(data: Dict, manual_data: Dict, match_review: Dict):
     print(f"✓ Exported {review_path}")
 
 
-def find_object_end(text: str, start_pos: int) -> int:
-    """Find the end of a JavaScript object starting at start_pos."""
-    brace_start = text.find("{", start_pos)
-    if brace_start == -1:
-        return -1
-    depth = 0
-    in_string = False
-    escape_next = False
-    for i in range(brace_start, len(text)):
-        char = text[i]
-        if escape_next:
-            escape_next = False
-            continue
-        if char == '\\':
-            escape_next = True
-            continue
-        if char == '"' and not escape_next:
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if char == '{':
-            depth += 1
-        elif char == '}':
-            depth -= 1
-            if depth == 0:
-                return i
-    return -1
-
-
 def update_viewer(data: Dict, manual_data: Dict, match_review: Dict):
-    """Update public/index.html with new data."""
-    index_path = PUBLIC_DIR / "index.html"
+    """Write data to standalone JS files in public/js/.
 
-    print(f"\nReading {index_path}...")
-    with open(index_path, "r") as f:
-        content = f.read()
+    No longer performs HTML surgery on index.html. The HTML file references
+    these JS files via <script> tags.
+    """
+    js_dir = PUBLIC_DIR / "js"
+    js_dir.mkdir(exist_ok=True)
 
-    # 1. Update dropdown
-    print("  Updating dropdown...")
-    dropdown_pattern = r'<select class="company-select" id="companySelect">.*?</select>'
-    new_dropdown = f'''<select class="company-select" id="companySelect">
-{generate_dropdown_html()}
-      </select>'''
-    content = re.sub(dropdown_pattern, new_dropdown, content, flags=re.DOTALL)
+    print(f"\nWriting data files to {js_dir}/...")
 
-    # 2. Update DATA section (stub only — auto map data used for enrichment, not injected)
-    print("  Updating DATA (stub)...")
-    data_start = content.find("const DATA = {")
-    if data_start == -1:
-        print("  ERROR: Could not find DATA")
-        return False
-    data_end = find_object_end(content, data_start)
-    if data_end == -1:
-        # DATA is already a stub like "const DATA = {};"
-        data_end = content.find(";", data_start)
-        if data_end == -1:
-            print("  ERROR: Could not find end of DATA")
-            return False
-        data_end -= 1  # Point to the } before ;
-    data_replacement = "const DATA = {}"
-    content = content[:data_start] + data_replacement + content[data_end + 1:]
+    # DATA stub (auto map not injected into viewer)
+    data_path = js_dir / "data.js"
+    data_path.write_text("const DATA = {};\n")
+    print(f"  Wrote {data_path} (stub)")
 
-    # 3. Update MANUAL_DATA section
-    print("  Updating MANUAL_DATA...")
-    manual_start = content.find("const MANUAL_DATA = {")
-    if manual_start == -1:
-        print("  ERROR: Could not find MANUAL_DATA")
-        return False
-    manual_end = find_object_end(content, manual_start)
-    if manual_end == -1:
-        print("  ERROR: Could not find end of MANUAL_DATA")
-        return False
-    manual_replacement = f"const MANUAL_DATA = {json.dumps(manual_data, indent=2)}"
-    content = content[:manual_start] + manual_replacement + content[manual_end + 1:]
+    # MANUAL_DATA
+    manual_path = js_dir / "manual-data.js"
+    manual_content = f"const MANUAL_DATA = {json.dumps(manual_data, indent=2)};\n"
+    manual_path.write_text(manual_content)
+    print(f"  Wrote {manual_path} ({len(manual_content):,} bytes)")
 
-    # 4. Update MATCH_REVIEW_DATA section
-    print("  Updating MATCH_REVIEW_DATA...")
-    review_start = content.find("const MATCH_REVIEW_DATA = {")
-    if review_start == -1:
-        print("  ERROR: Could not find MATCH_REVIEW_DATA")
-        return False
-    review_end = find_object_end(content, review_start)
-    if review_end == -1:
-        print("  ERROR: Could not find end of MATCH_REVIEW_DATA")
-        return False
-    review_replacement = f"const MATCH_REVIEW_DATA = {json.dumps(match_review, indent=2)}"
-    content = content[:review_start] + review_replacement + content[review_end + 1:]
+    # MATCH_REVIEW_DATA
+    review_path = js_dir / "match-review-data.js"
+    review_content = f"const MATCH_REVIEW_DATA = {json.dumps(match_review, indent=2)};\n"
+    review_path.write_text(review_content)
+    print(f"  Wrote {review_path} ({len(review_content):,} bytes)")
 
-    # Backup original
-    backup_path = PUBLIC_DIR / f"index.html.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    with open(index_path, "r") as f:
-        original = f.read()
-    with open(backup_path, "w") as f:
-        f.write(original)
-    print(f"  Backed up to {backup_path}")
-
-    # Write new content
-    with open(index_path, "w") as f:
-        f.write(content)
-
-    print(f"✓ Updated {index_path}")
-    print(f"  New size: {len(content):,} characters")
-
+    print("✓ Data files updated")
     return True
 
 
@@ -986,7 +900,8 @@ def main():
         success = update_viewer(data, manual_data, match_review)
         if success:
             print("\n✓ Integration complete!")
-            print("  Run 'npm run dev' to test locally")
+            print("  Data files written to public/js/")
+            print("  Run 'python3 -m http.server 8080 --directory public/' to test locally")
             print("  Run 'vercel' to deploy")
 
 

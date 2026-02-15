@@ -21,9 +21,11 @@ batches_enriched/ → extract → extractions/ → consolidate → output/ → b
 | 1. Extract | `extract_*.py` | `extractions/{co}/entities_llm_v2.json` |
 | 2. Consolidate | `consolidate_with_hierarchy.py` | `output/{co}/consolidated_with_hierarchy.json` |
 | 3. Build Map | `build_true_auto_map.py` | `output/{co}_true_auto_map.json` |
-| 4. Integrate | `integrate_viewer.py` | `public/index.html` |
+| 4. Integrate | `integrate_viewer.py` | `public/js/data.js`, `manual-data.js`, `match-review-data.js` |
 
 **Note:** `build_true_auto_map.py` still runs — its output is used to enrich MANUAL_DATA with Gong evidence and to generate MATCH_REVIEW_DATA. But the auto map is NOT injected into the viewer (`DATA = {}` stub).
+
+`integrate_viewer.py --update` writes standalone JS files to `public/js/`. It no longer modifies `index.html`.
 
 ---
 
@@ -112,9 +114,23 @@ All endpoints: CORS enabled, `Cache-Control: no-store`, account validation via `
 | Raw extractions | `extractions/{co}/entities_llm_v2.json` |
 | Auto map (pipeline intermediate) | `output/{co}_true_auto_map.json` |
 | Manual maps (source) | `Manual Maps Jan 26 2026/{co}_rd_map.json` |
-| Viewer | `public/index.html` |
+| Viewer HTML shell | `public/index.html` (407 lines) |
+| Viewer CSS | `public/css/styles.css` |
+| Viewer JS modules | `public/js/*.js` (13 files, ~4,590 lines) |
+| Pipeline-generated data | `public/js/data.js`, `manual-data.js`, `match-review-data.js` (gitignored) |
 | KV config | `api/_lib/kv.ts` |
 | Account validation | `api/_lib/validation.ts` |
+| E2E feature spec | `tests/e2e-feature-spec.md` |
+
+### Viewer JS Module Load Order
+
+```
+state.js → utils.js → tree-ops.js → kv-api.js → rendering.js →
+evidence.js → match-review.js → manage-entities.js → entity-merge.js →
+manual-map-view.js → conflict-resolution.js → autosave-sync.js → init.js
+```
+
+All functions are global (no ES modules). Load order is enforced by `<script>` tag order in `index.html`. Data files (`data.js`, `manual-data.js`, `match-review-data.js`) load before app modules.
 
 ---
 
