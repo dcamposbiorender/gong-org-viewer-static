@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
-INDEX_HTML_PATH = PROJECT_ROOT / 'public' / 'index.html'
+INDEX_HTML_PATH = PROJECT_ROOT / 'index.html'
 
 
 def get_html():

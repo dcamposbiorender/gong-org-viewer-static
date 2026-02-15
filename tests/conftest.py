@@ -125,8 +125,8 @@ def count_nodes_with_snippets(node: dict, count: int = 0) -> int:
 
 
 def get_index_html_path() -> Path:
-    """Get path to public/index.html."""
-    return PROJECT_ROOT / 'public' / 'index.html'
+    """Get path to index.html (now at project root for Vite)."""
+    return PROJECT_ROOT / 'index.html'
 
 
 def get_enriched_auto_map_path(company: str) -> Path:

@@ -116,15 +116,30 @@ All endpoints: CORS enabled, `Cache-Control: no-store`, account validation via `
 | Raw extractions | `extractions/{co}/entities_llm_v2.json` |
 | Auto map (pipeline intermediate) | `output/{co}_true_auto_map.json` |
 | Manual maps (source) | `Manual Maps Jan 26 2026/{co}_rd_map.json` |
-| Viewer HTML shell | `public/index.html` (407 lines) |
+| Viewer HTML shell | `index.html` (project root — Vite entry point) |
+| Vite config | `vite.config.ts` |
+| TypeScript config | `tsconfig.json` (strict mode) |
+| TypeScript types | `src/types.ts` (all interfaces) |
+| Module entry point | `src/init.ts` (Vite shim — Phase 1b will migrate JS here) |
 | Viewer CSS | `public/css/styles.css` |
 | Viewer JS modules | `public/js/*.js` (13 files, ~4,590 lines) |
 | Pipeline-generated data | `public/js/data.js`, `manual-data.js`, `match-review-data.js` (gitignored) |
+| Build output | `dist/` (gitignored — Vite build output) |
 | KV config | `api/_lib/kv.ts` |
 | Account validation | `api/_lib/validation.ts` |
 | E2E feature spec | `tests/e2e-feature-spec.md` |
 
-### Viewer JS Module Load Order
+### Build & Deploy
+
+```bash
+npm run build    # tsc --noEmit && vite build → dist/
+npm run dev      # Vite dev server with HMR
+npm run test     # Vitest (JS unit tests)
+npm install --include=dev  # Required (env has omit=dev)
+vercel           # Deploy dist/ + api/ to Vercel
+```
+
+### Viewer JS Module Load Order (Phase 1a — legacy globals)
 
 ```
 state.js → utils.js → tree-ops.js → kv-api.js → rendering.js →
@@ -132,7 +147,7 @@ evidence.js → match-review.js → manage-entities.js → entity-merge.js →
 manual-map-view.js → conflict-resolution.js → autosave-sync.js → init.js
 ```
 
-All functions are global (no ES modules). Load order is enforced by `<script>` tag order in `index.html`. Data files (`data.js`, `manual-data.js`, `match-review-data.js`) load before app modules.
+All functions are still global (no ES modules yet). Load order enforced by `<script>` tag order in `index.html`. Data files load before app modules. Phase 1b will migrate to ES module imports in `src/`.
 
 ---
 

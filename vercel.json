@@ -1,7 +1,7 @@
 {
-  "buildCommand": "",
-  "installCommand": "npm install",
-  "outputDirectory": "public",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install --include=dev",
+  "outputDirectory": "dist",
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }

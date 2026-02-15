@@ -39,16 +39,28 @@ graph TD
 
 ```
 GongOrgViewerStatic/
-├── batches_enriched/{company}/batch_*.json    # Source transcripts + participants
-├── extractions/{company}/entities_llm_v2.json # Raw LLM extractions
+├── index.html                                  # HTML shell (Vite entry point, moved from public/)
+├── vite.config.ts                              # Vite bundler config
+├── tsconfig.json                               # TypeScript strict mode config
+├── src/                                        # NEW: TypeScript source (Phase 1b will migrate JS here)
+│   ├── types.ts                                # Complete interfaces for all data structures
+│   └── init.ts                                 # Vite module entry point (shim layer)
+├── dist/                                       # Vite build output (gitignored)
+├── batches_enriched/{company}/batch_*.json     # Source transcripts + participants
+├── extractions/{company}/entities_llm_v2.json  # Raw LLM extractions
 ├── output/
 │   ├── {company}/consolidated_with_hierarchy.json
-│   ├── {company}_true_auto_map.json           # CURRENT auto map
-│   ├── {company}_enriched_auto_map.json       # LEGACY (deprecated)
+│   ├── {company}_true_auto_map.json            # CURRENT auto map
+│   ├── {company}_enriched_auto_map.json        # LEGACY (deprecated)
 │   └── {company}_enriched_match_review_data.json
 ├── "Manual Maps Jan 26 2026"/{company}_rd_map.json
-└── public/
-    ├── index.html                              # HTML shell + script tags (407 lines)
+├── api/                                        # Vercel serverless functions (TypeScript)
+│   ├── _lib/kv.ts, validation.ts, cors.ts
+│   ├── corrections.ts, field-edits.ts, sizes.ts, merges.ts
+│   ├── match-review.ts, graduated-map.ts, resolutions.ts
+│   ├── manual-map-overrides.ts, manual-map-modifications.ts
+│   ├── autosave.ts, sync-version.ts
+└── public/                                     # Static assets (Vite copies to dist/)
     ├── css/styles.css                          # Extracted CSS (1,866 lines)
     └── js/
         ├── data.js                             # DATA stub (gitignored, pipeline-generated)
@@ -67,6 +79,15 @@ GongOrgViewerStatic/
         ├── conflict-resolution.js              # Resolve modal, verification conflicts
         ├── autosave-sync.js                    # performAutosave, sync polling
         └── init.js                             # Async IIFE: KV loads, event binding, startup
+```
+
+### Build & Deploy
+
+```bash
+npm run build    # tsc --noEmit && vite build → dist/
+npm run dev      # Vite dev server with HMR
+npm run test     # Vitest (JS unit tests)
+vercel           # Deploy dist/ + api/ to Vercel
 ```
 
 ---

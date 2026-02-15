@@ -23,6 +23,9 @@ public/js/data.js
 public/js/manual-data.js
 public/js/match-review-data.js
 
+# Vite build output
+dist/
+
 # Backup files
 public/index.html.backup.*
 
