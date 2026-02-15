@@ -142,6 +142,7 @@ function renderManualMapTree(node, level = 0) {
     };
     manualMapOverrides[draggedNodeId] = newOverride;
     saveManualMapOverrides();
+    saveManualMapOverrideToKV(currentCompany, draggedNodeId, newOverride);
     renderManualMapView();
   });
 
@@ -220,8 +221,8 @@ function renderExtractedMatches(manualNode) {
       const contactEl = document.createElement('div');
       contactEl.className = 'extracted-match supported';
       contactEl.innerHTML = `
-        <div class="extracted-match-name">${contact.name}</div>
-        <div class="extracted-match-meta">${contact.title || ''} ${contact.isDecisionMaker ? '(Decision Maker)' : ''}</div>
+        <div class="extracted-match-name">${escapeHtml(contact.name)}</div>
+        <div class="extracted-match-meta">${escapeHtml(contact.title || '')} ${contact.isDecisionMaker ? '(Decision Maker)' : ''}</div>
       `;
       container.appendChild(contactEl);
     });
@@ -238,7 +239,7 @@ function renderManualMapView() {
     const tree = document.getElementById('tree');
     tree.innerHTML = `
       <div class="no-manual-map" style="padding: 48px; text-align: center;">
-        <h3>No manual map available for ${MANUAL_DATA[companyKey]?.company || companyKey}</h3>
+        <h3>No manual map available for ${escapeHtml(MANUAL_DATA[companyKey]?.company || companyKey)}</h3>
         <p>No manual map data found for this company.</p>
       </div>
     `;

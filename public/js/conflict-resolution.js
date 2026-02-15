@@ -29,12 +29,12 @@ function showVerificationConflicts() {
     content.innerHTML = conflicts.map(c => `
       <div class="change-item" style="cursor: pointer;" onclick="scrollToEntity('${c.entityId}')">
         <div class="change-item-header">
-          <span class="change-item-title">${c.name}</span>
-          <span class="change-item-entity">${c.entityName}</span>
+          <span class="change-item-title">${escapeHtml(c.name)}</span>
+          <span class="change-item-entity">${escapeHtml(c.entityName)}</span>
         </div>
         <div class="change-item-details" style="font-size: 12px; color: #666;">
-          <div><strong>Gong:</strong> ${c.gong_title || '(no title)'}</div>
-          <div><strong>${c.source_name || 'Public'}:</strong> <a href="${c.source_url}" target="_blank">${c.public_title || '(no title)'}</a></div>
+          <div><strong>Gong:</strong> ${escapeHtml(c.gong_title || '(no title)')}</div>
+          <div><strong>${escapeHtml(c.source_name || 'Public')}:</strong> <a href="${sanitizeUrl(c.source_url)}" target="_blank">${escapeHtml(c.public_title || '(no title)')}</a></div>
         </div>
       </div>
     `).join('');
@@ -115,7 +115,7 @@ function openResolveModal(conflict, entityId, leaderName) {
 
   const body = document.getElementById('resolveModalBody');
   body.innerHTML = `
-    <p style="margin-bottom: 16px; color: #666;">Which source is correct for <strong>${leaderName}</strong>?</p>
+    <p style="margin-bottom: 16px; color: #666;">Which source is correct for <strong>${escapeHtml(leaderName)}</strong>?</p>
 
     <div class="resolve-option" data-choice="gong">
       <div class="resolve-option-header">
@@ -124,20 +124,20 @@ function openResolveModal(conflict, entityId, leaderName) {
         </div>
         <button class="resolve-use-btn" onclick="selectResolveOption(this.closest('.resolve-option'), 'gong')">Use Gong</button>
       </div>
-      <div class="resolve-option-title">${gongData.title || '(no title)'}</div>
-      <div class="resolve-option-dept">${gongData.department || '(no department)'}</div>
+      <div class="resolve-option-title">${escapeHtml(gongData.title || '(no title)')}</div>
+      <div class="resolve-option-dept">${escapeHtml(gongData.department || '(no department)')}</div>
     </div>
 
     <div class="resolve-option" data-choice="public">
       <div class="resolve-option-header">
         <div class="resolve-option-label">
-          <span class="resolve-option-source">${publicData.source_name || 'Public Source'}</span>
-          ${publicData.source_url ? `<a href="${publicData.source_url}" target="_blank" style="font-size: 11px; margin-left: 6px;">(view source)</a>` : ''}
+          <span class="resolve-option-source">${escapeHtml(publicData.source_name || 'Public Source')}</span>
+          ${publicData.source_url ? `<a href="${sanitizeUrl(publicData.source_url)}" target="_blank" style="font-size: 11px; margin-left: 6px;">(view source)</a>` : ''}
         </div>
         <button class="resolve-use-btn" onclick="selectResolveOption(this.closest('.resolve-option'), 'public')">Use Public</button>
       </div>
-      <div class="resolve-option-title">${publicData.title || '(no title)'}</div>
-      <div class="resolve-option-dept">${publicData.department || '(no department)'}</div>
+      <div class="resolve-option-title">${escapeHtml(publicData.title || '(no title)')}</div>
+      <div class="resolve-option-dept">${escapeHtml(publicData.department || '(no department)')}</div>
     </div>
 
     <div class="resolve-option" data-choice="both">

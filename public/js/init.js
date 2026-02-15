@@ -11,8 +11,8 @@ await Promise.all([
   loadEntityMerges(),
   loadResolutions()
 ]);
-loadManualMapOverrides();
-loadManualMapModifications();
+await loadManualMapOverrides();
+await loadManualMapModifications();
 
 // Load saved mode preference (auto no longer exists, default to manual)
 const savedMode = localStorage.getItem('orgChartMode');
@@ -36,8 +36,8 @@ document.getElementById('companySelect').addEventListener('change', async e => {
     loadEntityMerges(),
     loadResolutions()
   ]);
-  loadManualMapOverrides();
-  loadManualMapModifications();
+  await loadManualMapOverrides();
+  await loadManualMapModifications();
   if (currentMode === 'manual') {
     renderManualMapView();
   } else if (currentMode === 'matchReview') {

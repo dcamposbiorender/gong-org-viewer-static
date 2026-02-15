@@ -62,8 +62,8 @@ async function checkForUpdates() {
         loadEntityMerges(),
         loadResolutions()
       ]);
-      loadManualMapOverrides();
-      loadManualMapModifications();
+      await loadManualMapOverrides();
+      await loadManualMapModifications();
       if (currentMode === 'manual') {
         renderManualMapView();
       } else if (currentMode === 'matchReview') {

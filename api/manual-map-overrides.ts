@@ -3,15 +3,15 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateAccount } from './_lib/validation';
 import { setCorsHeaders } from './_lib/cors';
 
-interface ManualMapEntry {
-  company: string;
-  source: string;
-  stats: {
-    totalNodes: number;
-    supportedNodes: number;
-    conflictingNodes: number;
-  };
-  root: object;
+interface ManualMapOverride {
+  originalParent: string;
+  newParent: string;
+  newParentName: string;
+  movedAt: string;
+}
+
+interface OverridesMap {
+  [nodeId: string]: ManualMapOverride;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -26,37 +26,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: validation.error });
   }
   const account = validation.account!;
-
-  const kvKey = `graduated-map:${account}`;
+  const kvKey = `manual-map-overrides:${account}`;
 
   try {
     if (req.method === 'GET') {
-      const data = await kv.get<ManualMapEntry>(kvKey);
-      if (!data) {
-        return res.status(404).json({ error: 'No graduated map found' });
-      }
+      const data = await kv.get<OverridesMap>(kvKey) || {};
       return res.json(data);
     }
 
     if (req.method === 'POST') {
-      const { map } = req.body as { map: ManualMapEntry };
+      const { nodeId, override } = req.body as {
+        nodeId: string;
+        override: ManualMapOverride;
+      };
 
-      if (!map) {
-        return res.status(400).json({ error: 'map required' });
+      if (!nodeId || !override) {
+        return res.status(400).json({ error: 'nodeId and override required' });
       }
 
-      await kv.set(kvKey, map);
+      const data = await kv.get<OverridesMap>(kvKey) || {};
+      data[nodeId] = override;
+      await kv.set(kvKey, data);
       await bumpSyncVersion(account);
-
-      return res.json({
-        success: true,
-        totalNodes: map.stats?.totalNodes || 0,
-        savedAt: new Date().toISOString()
-      });
+      return res.json({ success: true });
     }
 
     if (req.method === 'DELETE') {
-      await kv.del(kvKey);
+      const { nodeId } = req.body as { nodeId: string };
+
+      if (!nodeId) {
+        return res.status(400).json({ error: 'nodeId required' });
+      }
+
+      const data = await kv.get<OverridesMap>(kvKey) || {};
+      delete data[nodeId];
+      await kv.set(kvKey, data);
       await bumpSyncVersion(account);
       return res.json({ success: true });
     }

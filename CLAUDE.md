@@ -101,6 +101,8 @@ The viewer uses 10-second polling for multi-user sync (1-3 users):
 | `/api/resolutions` | Gong vs public data conflicts |
 | `/api/autosave` | Session state snapshots |
 | `/api/sync-version` | Multi-user sync version polling |
+| `/api/manual-map-overrides` | Manual map drag-drop reparenting |
+| `/api/manual-map-modifications` | Manual map add/delete entities |
 
 All endpoints: CORS enabled, `Cache-Control: no-store`, account validation via `?account=` param.
 

@@ -7,9 +7,22 @@ function safeJsonParse(str, fallback = null) {
 }
 
 function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+  if (text == null) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// Validate URL is safe for href (blocks javascript:, data:, etc.)
+function sanitizeUrl(url) {
+  if (!url) return '#';
+  const str = String(url).trim();
+  if (str.startsWith('http://') || str.startsWith('https://')) return str;
+  if (str.startsWith('/')) return str;
+  return '#';
 }
 
 // Start editing a Manual Map node

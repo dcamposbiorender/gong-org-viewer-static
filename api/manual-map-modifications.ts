@@ -3,15 +3,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateAccount } from './_lib/validation';
 import { setCorsHeaders } from './_lib/cors';
 
-interface ManualMapEntry {
-  company: string;
-  source: string;
-  stats: {
-    totalNodes: number;
-    supportedNodes: number;
-    conflictingNodes: number;
-  };
-  root: object;
+interface Modifications {
+  added: Array<{ parentId: string; node: any; addedAt: string }>;
+  deleted: Array<{ nodeId: string; deletedAt: string }>;
+}
+
+interface ModificationsMap {
+  [companyKey: string]: Modifications;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -26,37 +24,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: validation.error });
   }
   const account = validation.account!;
-
-  const kvKey = `graduated-map:${account}`;
+  const kvKey = `manual-map-modifications:${account}`;
 
   try {
     if (req.method === 'GET') {
-      const data = await kv.get<ManualMapEntry>(kvKey);
-      if (!data) {
-        return res.status(404).json({ error: 'No graduated map found' });
-      }
+      const data = await kv.get<ModificationsMap>(kvKey) || {};
       return res.json(data);
     }
 
     if (req.method === 'POST') {
-      const { map } = req.body as { map: ManualMapEntry };
+      const { modifications } = req.body as { modifications: ModificationsMap };
 
-      if (!map) {
-        return res.status(400).json({ error: 'map required' });
+      if (!modifications) {
+        return res.status(400).json({ error: 'modifications required' });
       }
 
-      await kv.set(kvKey, map);
-      await bumpSyncVersion(account);
-
-      return res.json({
-        success: true,
-        totalNodes: map.stats?.totalNodes || 0,
-        savedAt: new Date().toISOString()
-      });
-    }
-
-    if (req.method === 'DELETE') {
-      await kv.del(kvKey);
+      await kv.set(kvKey, modifications);
       await bumpSyncVersion(account);
       return res.json({ success: true });
     }

@@ -20,7 +20,7 @@ function showEntityPickerModal(company, itemId) {
   if (options.length === 0) {
     list.innerHTML = `
       <div style="padding: 20px; text-align: center; color: #999;">
-        No Manual Map available for ${company}.<br>
+        No Manual Map available for ${escapeHtml(company)}.<br>
         <small>Use "Graduate" in Auto mode to create one.</small>
       </div>
     `;
@@ -39,8 +39,8 @@ function renderEntityPickerList(options) {
     <div class="entity-picker-item" onclick="selectEntityForMatch('${opt.name.replace(/'/g, "\\'")}', '${opt.path.replace(/'/g, "\\'")}')"
          style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #eee; transition: background 0.2s;"
          onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='transparent'">
-      <div style="font-weight: 500;">${opt.name}</div>
-      <div style="font-size: 11px; color: #888; margin-top: 2px;">${opt.path}</div>
+      <div style="font-weight: 500;">${escapeHtml(opt.name)}</div>
+      <div style="font-size: 11px; color: #888; margin-top: 2px;">${escapeHtml(opt.path)}</div>
     </div>
   `).join('');
 }
@@ -58,7 +58,7 @@ function filterEntityPickerList() {
   if (filtered.length === 0) {
     document.getElementById('entityPickerList').innerHTML = `
       <div style="padding: 20px; text-align: center; color: #999;">
-        No entities match "${search}"
+        No entities match "${escapeHtml(search)}"
       </div>
     `;
   } else {
@@ -198,7 +198,7 @@ function renderMatchReview(company) {
     mrRejectedCount.textContent = '0';
     tbody.innerHTML = `
       <tr><td colspan="6" style="text-align: center; padding: 40px; color: #999;">
-        No match review data available for ${targetCompany}
+        No match review data available for ${escapeHtml(targetCompany)}
       </td></tr>
     `;
     return;
@@ -281,33 +281,33 @@ function renderMatchReview(company) {
     return `
       <tr class="status-${status}" data-item-id="${item.id}">
         <td>
-          <div class="mr-snippet" title="${(item.snippet || '').replace(/"/g, '&quot;')}">
-            "${mrTruncateSnippet(item.snippet)}"
+          <div class="mr-snippet" title="${escapeHtml(item.snippet || '')}">
+            "${escapeHtml(mrTruncateSnippet(item.snippet))}"
           </div>
-          ${item.snippet_date ? `<div class="mr-gong-size">${item.snippet_date}</div>` : ''}
+          ${item.snippet_date ? `<div class="mr-gong-size">${escapeHtml(item.snippet_date)}</div>` : ''}
         </td>
         <td>
           <div class="mr-person">
-            <div class="mr-person-name">${item.person_name || 'Unknown'}</div>
-            ${item.person_email ? `<div class="mr-person-email">${item.person_email}</div>` : ''}
+            <div class="mr-person-name">${escapeHtml(item.person_name || 'Unknown')}</div>
+            ${item.person_email ? `<div class="mr-person-email">${escapeHtml(item.person_email)}</div>` : ''}
           </div>
         </td>
         <td>
-          <div class="mr-gong-entity">${item.gong_entity || ''}</div>
-          ${item.gong_parent ? `<div class="mr-gong-parent">Parent: ${item.gong_parent}</div>` : ''}
-          ${item.team_size ? `<div class="mr-gong-size">Size: ${item.team_size}</div>` : ''}
+          <div class="mr-gong-entity">${escapeHtml(item.gong_entity || '')}</div>
+          ${item.gong_parent ? `<div class="mr-gong-parent">Parent: ${escapeHtml(item.gong_parent)}</div>` : ''}
+          ${item.team_size ? `<div class="mr-gong-size">Size: ${escapeHtml(item.team_size)}</div>` : ''}
         </td>
         <td>
           ${displayedMatch?.manual_node_name ? `
-            <div class="mr-suggestion">${displayedMatch.manual_node_name}</div>
-            <div class="mr-suggestion-path">${displayedMatch.manual_node_path || ''}</div>
-            ${suggestion?.confidence ? `<span class="mr-confidence ${suggestion.confidence}">${suggestion.confidence}</span>` : ''}
+            <div class="mr-suggestion">${escapeHtml(displayedMatch.manual_node_name)}</div>
+            <div class="mr-suggestion-path">${escapeHtml(displayedMatch.manual_node_path || '')}</div>
+            ${suggestion?.confidence ? `<span class="mr-confidence ${suggestion.confidence}">${escapeHtml(suggestion.confidence)}</span>` : ''}
           ` : `
             <div class="mr-no-suggestion">No suggestion</div>
           `}
         </td>
         <td>
-          <div class="mr-reasoning">${suggestion?.reasoning || ''}</div>
+          <div class="mr-reasoning">${escapeHtml(suggestion?.reasoning || '')}</div>
         </td>
         <td>
           ${status === 'pending' ? `

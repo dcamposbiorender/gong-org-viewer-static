@@ -243,15 +243,15 @@ function showManualNodeEvidence(node) {
 
   let html = `
     <div class="evidence-entity-info">
-      <h4>${node.name}</h4>
+      <h4>${escapeHtml(node.name)}</h4>
       <div class="evidence-info-row">
         <span class="evidence-info-label">Type</span>
-        <span>${node.type || 'unknown'}</span>
+        <span>${escapeHtml(node.type || 'unknown')}</span>
       </div>
       <div class="evidence-info-row">
         <span class="evidence-info-label">Status</span>
         <span style="color: ${evidence.status === 'supported' ? '#059669' : evidence.status === 'conflicting' ? '#dc2626' : '#888'}">
-          ${evidence.status || 'unverified'}${approvedMatches.length > 0 ? ` (+${approvedMatches.length} approved)` : ''}
+          ${escapeHtml(evidence.status || 'unverified')}${approvedMatches.length > 0 ? ` (+${approvedMatches.length} approved)` : ''}
         </span>
       </div>
       <div class="evidence-info-row">
@@ -260,7 +260,7 @@ function showManualNodeEvidence(node) {
       </div>
       ${teamSizeInputHtml}
       ${sizeMentionsHtml}
-      ${node.sites?.length > 0 ? `<div class="evidence-info-row"><span class="evidence-info-label">Sites</span><span>${node.sites.join(', ')}</span></div>` : ''}
+      ${node.sites?.length > 0 ? `<div class="evidence-info-row"><span class="evidence-info-label">Sites</span><span>${node.sites.map(s => escapeHtml(s)).join(', ')}</span></div>` : ''}
       <div class="entity-crud-buttons" style="margin-top: 12px; display: flex; gap: 8px;">
         <button onclick="showAddChildModal('${node.id}')" style="flex: 1; padding: 6px 12px; font-size: 12px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">
           + Add Child
@@ -279,8 +279,8 @@ function showManualNodeEvidence(node) {
     matchedContacts.forEach(c => {
       html += `
         <div style="padding: 6px 0; border-bottom: 1px solid #eee; font-size: 12px;">
-          <strong>${c.name || ''}</strong>
-          ${c.title ? `<span style="color: #666;"> - ${c.title}</span>` : ''}
+          <strong>${escapeHtml(c.name || '')}</strong>
+          ${c.title ? `<span style="color: #666;"> - ${escapeHtml(c.title)}</span>` : ''}
           ${c.isDecisionMaker ? '<span style="color: #059669; font-size: 10px; margin-left: 6px;">(Decision Maker)</span>' : ''}
         </div>
       `;
@@ -297,19 +297,19 @@ function showManualNodeEvidence(node) {
       html += `
         <div class="snippet-card" data-snippet-orig-idx="${idx}">
           <div class="snippet-date">
-            ${s.gongUrl ? `<a href="${s.gongUrl}" target="_blank" class="snippet-link" style="color: #2563eb; text-decoration: none;">${s.date || ''} ↗</a>` : (s.date || '')}
+            ${s.gongUrl ? `<a href="${sanitizeUrl(s.gongUrl)}" target="_blank" class="snippet-link" style="color: #2563eb; text-decoration: none;">${escapeHtml(s.date || '')} ↗</a>` : escapeHtml(s.date || '')}
           </div>
-          <div class="snippet-quote">"${boldSizeMentions(s.quote)}"</div>
+          <div class="snippet-quote">"${boldSizeMentions(escapeHtml(s.quote))}"</div>
           <div class="snippet-attribution">
             <span>
-              ${s.internalName ? `Internal: ${s.internalName}` : ''}
+              ${s.internalName ? `Internal: ${escapeHtml(s.internalName)}` : ''}
               ${s.internalName && s.customerName ? ' | ' : ''}
-              ${s.customerName ? `Customer: ${s.customerName}` : ''}
+              ${s.customerName ? `Customer: ${escapeHtml(s.customerName)}` : ''}
               ${!s.internalName && !s.customerName ? '—' : ''}
             </span>
-            ${s.gongUrl ? `<a href="${s.gongUrl}" class="snippet-link" target="_blank">↗ Gong</a>` : ''}
+            ${s.gongUrl ? `<a href="${sanitizeUrl(s.gongUrl)}" class="snippet-link" target="_blank">↗ Gong</a>` : ''}
           </div>
-          ${s.entityName ? `<div class="snippet-entity" style="font-size: 11px; color: #888; margin-top: 4px;">from: ${s.entityName}</div>` : ''}
+          ${s.entityName ? `<div class="snippet-entity" style="font-size: 11px; color: #888; margin-top: 4px;">from: ${escapeHtml(s.entityName)}</div>` : ''}
           ${s.contextBefore !== undefined ? `<button class="snippet-context-btn" onclick="showManualSnippetContext(${idx})">📄 Context</button>` : ''}
         </div>
       `;

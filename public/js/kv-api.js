@@ -217,11 +217,24 @@ async function loadManualMapsFromKV(onlyCompany) {
   }));
 }
 
-// Load Manual Map modifications (called on init, after loadManualMapsFromKV)
-function loadManualMapModifications() {
+// Load Manual Map modifications from localStorage + KV
+async function loadManualMapModifications() {
   const stored = localStorage.getItem('manualMapModifications');
   if (stored) {
     manualMapModifications = safeJsonParse(stored, {});
+  }
+
+  try {
+    const response = await fetch(kvApiUrl('manual-map-modifications', currentCompany));
+    if (response.ok) {
+      const kvData = await response.json();
+      if (kvData && typeof kvData === 'object' && Object.keys(kvData).length > 0) {
+        manualMapModifications = kvData;
+        localStorage.setItem('manualMapModifications', JSON.stringify(manualMapModifications));
+      }
+    }
+  } catch (e) {
+    // Use localStorage cache
   }
 }
 
@@ -286,15 +299,41 @@ function getManualMapOriginalParentName(nodeId) {
   return parent?.name || 'root';
 }
 
-// Save Manual Map overrides to localStorage
+// Save Manual Map overrides to localStorage + KV
 function saveManualMapOverrides() {
   localStorage.setItem('manualMapOverrides', JSON.stringify(manualMapOverrides));
 }
 
-// Load Manual Map overrides from localStorage
-function loadManualMapOverrides() {
+// Save a single manual map override to KV
+async function saveManualMapOverrideToKV(account, nodeId, override) {
+  try {
+    await fetch(kvApiUrl('manual-map-overrides', account), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nodeId, override })
+    });
+  } catch (e) {
+    console.warn('[ManualMapOverrides] KV save failed:', e.message);
+  }
+}
+
+// Load Manual Map overrides from localStorage + KV
+async function loadManualMapOverrides() {
   const stored = localStorage.getItem('manualMapOverrides');
   if (stored) manualMapOverrides = safeJsonParse(stored, {});
+
+  try {
+    const response = await fetch(kvApiUrl('manual-map-overrides', currentCompany));
+    if (response.ok) {
+      const kvData = await response.json();
+      if (kvData && typeof kvData === 'object') {
+        manualMapOverrides = { ...manualMapOverrides, ...kvData };
+        localStorage.setItem('manualMapOverrides', JSON.stringify(manualMapOverrides));
+      }
+    }
+  } catch (e) {
+    // Use localStorage cache
+  }
 }
 
 // ===== ENTITY MERGES (Duplicate Leader Handling) =====

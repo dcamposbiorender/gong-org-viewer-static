@@ -349,22 +349,27 @@ async function saveManualMapModifications(company) {
   const co = company || currentCompany;
   localStorage.setItem('manualMapModifications', JSON.stringify(manualMapModifications));
 
-  // Always sync to KV for cross-browser persistence
+  // Sync modifications list to KV
+  try {
+    await fetch(kvApiUrl('manual-map-modifications', co), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modifications: manualMapModifications })
+    });
+  } catch (e) {
+    console.warn('[ManualMapMods] KV sync failed:', e.message);
+  }
+
+  // Sync full map to KV for cross-browser persistence
   if (MANUAL_DATA[co]) {
     try {
-      const response = await fetch(kvApiUrl('graduated-map', co), {
+      await fetch(kvApiUrl('graduated-map', co), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ map: MANUAL_DATA[co] })
       });
-      if (!response.ok) {
-        console.error('[ManualMap] KV sync failed:', response.status);
-        showToast('Manual map sync failed - saved locally only', 'error');
-      } else {
-        console.log('[ManualMap] Synced entity changes to KV');
-      }
     } catch (e) {
-      console.error('[ManualMap] KV sync network error:', e.message);
+      console.warn('[ManualMap] KV sync failed:', e.message);
       showToast('Manual map sync failed - saved locally only', 'error');
     }
   }
@@ -568,7 +573,7 @@ function renderTree(node, level = 0, rangeStart, rangeEnd) {
         displayTitle = publicTitle;
       }
     }
-    let leaderText = displayTitle ? `${node.leader.name}, ${displayTitle}` : node.leader.name;
+    let leaderText = displayTitle ? `${escapeHtml(node.leader.name)}, ${escapeHtml(displayTitle)}` : escapeHtml(node.leader.name);
 
     if (verification) {
       const status = verification.verification_status;
@@ -576,20 +581,20 @@ function renderTree(node, level = 0, rangeStart, rangeEnd) {
 
       if (resolution) {
         // Conflict has been resolved - show blue badge
-        const resolvedTitle = `Resolved as "${resolution.choice}" on ${new Date(resolution.resolvedAt).toLocaleDateString()}`;
-        leaderEl.innerHTML = `<a href="${publicData?.source_url || '#'}" target="_blank" class="verification-link" title="${resolvedTitle}">${leaderText}</a><span class="verification-badge resolved" title="${resolvedTitle}" style="cursor: pointer;" onclick="event.stopPropagation(); openResolveModal(${JSON.stringify(verification).replace(/"/g, '&quot;')}, '${node.id}', '${node.leader.name.replace(/'/g, "\\'")}')">✓</span>`;
+        const resolvedTitle = `Resolved as &quot;${escapeHtml(resolution.choice)}&quot; on ${new Date(resolution.resolvedAt).toLocaleDateString()}`;
+        leaderEl.innerHTML = `<a href="${sanitizeUrl(publicData?.source_url)}" target="_blank" class="verification-link" title="${resolvedTitle}">${leaderText}</a><span class="verification-badge resolved" title="${resolvedTitle}" style="cursor: pointer;" onclick="event.stopPropagation(); openResolveModal(${JSON.stringify(verification).replace(/"/g, '&quot;')}, '${node.id}', '${node.leader.name.replace(/'/g, "\\'")}')">✓</span>`;
       } else if (status === 'match' && publicData?.source_url) {
         // Match - green checkmark with link
-        leaderEl.innerHTML = `<a href="${publicData.source_url}" target="_blank" class="verification-link" title="Verified via ${publicData.source_name || 'web'}">${leaderText}</a><span class="verification-badge match" title="Verified">✓</span>`;
+        leaderEl.innerHTML = `<a href="${sanitizeUrl(publicData.source_url)}" target="_blank" class="verification-link" title="Verified via ${escapeHtml(publicData.source_name || 'web')}">${leaderText}</a><span class="verification-badge match" title="Verified">✓</span>`;
       } else if (status === 'conflict' && publicData?.source_url) {
         // Conflict - red X with link, clickable to resolve
-        const conflictTitle = `Conflict: Gong says "${verification.gong_data?.title || ''}", public says "${publicData.title || ''}" - Click to resolve`;
-        leaderEl.innerHTML = `<a href="${publicData.source_url}" target="_blank" class="verification-link" title="${conflictTitle}">${leaderText}</a><span class="verification-badge conflict" title="Click to resolve" style="cursor: pointer;" onclick="event.stopPropagation(); openResolveModal(${JSON.stringify(verification).replace(/"/g, '&quot;')}, '${node.id}', '${node.leader.name.replace(/'/g, "\\'")}')">✗</span>`;
+        const conflictTitle = `Conflict: Gong says &quot;${escapeHtml(verification.gong_data?.title || '')}&quot;, public says &quot;${escapeHtml(publicData.title || '')}&quot; - Click to resolve`;
+        leaderEl.innerHTML = `<a href="${sanitizeUrl(publicData.source_url)}" target="_blank" class="verification-link" title="${conflictTitle}">${leaderText}</a><span class="verification-badge conflict" title="Click to resolve" style="cursor: pointer;" onclick="event.stopPropagation(); openResolveModal(${JSON.stringify(verification).replace(/"/g, '&quot;')}, '${node.id}', '${node.leader.name.replace(/'/g, "\\'")}')">✗</span>`;
       } else {
         // No verification but check for LinkedIn/email from Exa enrichment
         let enrichedHtml = leaderText;
         if (node.leader.linkedin_url) {
-          enrichedHtml = `<a href="${node.leader.linkedin_url}" target="_blank" class="verification-link" title="View LinkedIn Profile">${leaderText}</a><span class="linkedin-badge" title="LinkedIn Profile">in</span>`;
+          enrichedHtml = `<a href="${sanitizeUrl(node.leader.linkedin_url)}" target="_blank" class="verification-link" title="View LinkedIn Profile">${leaderText}</a><span class="linkedin-badge" title="LinkedIn Profile">in</span>`;
         }
         leaderEl.innerHTML = enrichedHtml;
       }
@@ -597,7 +602,7 @@ function renderTree(node, level = 0, rangeStart, rangeEnd) {
       // No verification but check for LinkedIn/email from Exa enrichment
       let enrichedHtml = leaderText;
       if (node.leader.linkedin_url) {
-        enrichedHtml = `<a href="${node.leader.linkedin_url}" target="_blank" class="verification-link" title="View LinkedIn Profile">${leaderText}</a><span class="linkedin-badge" title="LinkedIn Profile">in</span>`;
+        enrichedHtml = `<a href="${sanitizeUrl(node.leader.linkedin_url)}" target="_blank" class="verification-link" title="View LinkedIn Profile">${leaderText}</a><span class="linkedin-badge" title="LinkedIn Profile">in</span>`;
       }
       leaderEl.innerHTML = enrichedHtml;
     }
@@ -612,7 +617,7 @@ function renderTree(node, level = 0, rangeStart, rangeEnd) {
   // Meta - use getDisplaySize to respect user overrides
   const metaParts = [];
   const displayedSize = getDisplaySize(node, currentCompany);
-  if (displayedSize) metaParts.push(displayedSize);
+  if (displayedSize) metaParts.push(escapeHtml(displayedSize));
   metaParts.push(snippetsInRange.length + ' in range');
   if (node.conflicts?.length) metaParts.push(`<span class="conflicts">${node.conflicts.length} conflicts</span>`);
   
@@ -800,10 +805,10 @@ function selectNode(node, nodeEl, rangeStart, rangeEnd) {
 
   let html = `
     <div class="evidence-entity-info">
-      <div class="evidence-entity-name">${node.name}</div>
+      <div class="evidence-entity-name">${escapeHtml(node.name)}</div>
       <div class="evidence-entity-meta">
-        ${node.type.replace('_', ' ')}
-        ${node.leader?.name ? ` · ${node.leader.name}` : ''}
+        ${escapeHtml(node.type.replace('_', ' '))}
+        ${node.leader?.name ? ` · ${escapeHtml(node.leader.name)}` : ''}
         <br>${snippetsInRange.length} snippets in range · ${node.mentions} total mentions
       </div>
       ${sizeMentionsHtml}
@@ -813,13 +818,13 @@ function selectNode(node, nodeEl, rangeStart, rangeEnd) {
   if (changes.reorg.length || changes.leadership.length || changes.size.length) {
     html += '<div class="evidence-changes">';
     changes.reorg.forEach(c => {
-      html += `<div class="evidence-change reorg">⟳ Reorg: ${c.from} → ${c.to} (${formatDateShort(c.date)})</div>`;
+      html += `<div class="evidence-change reorg">⟳ Reorg: ${escapeHtml(c.from)} → ${escapeHtml(c.to)} (${formatDateShort(c.date)})</div>`;
     });
     changes.leadership.forEach(c => {
-      html += `<div class="evidence-change leadership">👤 Leadership: ${c.from} → ${c.to} (${formatDateShort(c.date)})</div>`;
+      html += `<div class="evidence-change leadership">👤 Leadership: ${escapeHtml(c.from)} → ${escapeHtml(c.to)} (${formatDateShort(c.date)})</div>`;
     });
     changes.size.forEach(c => {
-      html += `<div class="evidence-change size">📊 Size: ${c.from} → ${c.to} (${formatDateShort(c.date)})</div>`;
+      html += `<div class="evidence-change size">📊 Size: ${escapeHtml(c.from)} → ${escapeHtml(c.to)} (${formatDateShort(c.date)})</div>`;
     });
     html += '</div>';
   }
@@ -828,7 +833,7 @@ function selectNode(node, nodeEl, rangeStart, rangeEnd) {
   if (node.override) {
     html += `
       <div class="override-badge">
-        ◆ Moved from ${node.override.originalParent}
+        ◆ Moved from ${escapeHtml(node.override.originalParent)}
         <button class="reset-node-btn" onclick="resetNodeOverride('${node.id}')">reset</button>
       </div>
     `;
@@ -855,11 +860,11 @@ function selectNode(node, nodeEl, rangeStart, rangeEnd) {
     html += `
       <div class="external-source-card">
         <div class="external-source-header">
-          <span class="external-source-label">${pd.source_name || 'External Source'}</span>
-          ${pd.source_url ? `<a href="${pd.source_url}" target="_blank" class="external-source-link">View Source ↗</a>` : ''}
+          <span class="external-source-label">${escapeHtml(pd.source_name || 'External Source')}</span>
+          ${pd.source_url ? `<a href="${sanitizeUrl(pd.source_url)}" target="_blank" class="external-source-link">View Source ↗</a>` : ''}
         </div>
-        <div class="external-source-title">${pd.title || '(no title)'}</div>
-        <div class="external-source-dept">${pd.department || ''}</div>
+        <div class="external-source-title">${escapeHtml(pd.title || '(no title)')}</div>
+        <div class="external-source-dept">${escapeHtml(pd.department || '')}</div>
         <span class="external-source-status ${statusClass}">${statusText}</span>
         ${v.verification_status === 'conflict' && !resolution ? `
           <button style="margin-left: 8px; padding: 2px 8px; font-size: 11px; cursor: pointer; border: 1px solid #dc2626; background: white; color: #dc2626; border-radius: 4px;"
@@ -902,15 +907,15 @@ function selectNode(node, nodeEl, rangeStart, rangeEnd) {
             ${s.date}
             ${snippetSizes.length > 0 ? '<span class="snippet-tag" style="background:#ecfdf5;color:#047857;">Size Mention</span>' : ''}
           </div>
-          <div class="snippet-quote">"${boldSizeMentions(s.quote)}"</div>
+          <div class="snippet-quote">"${boldSizeMentions(escapeHtml(s.quote))}"</div>
           <div class="snippet-attribution">
             <span>
-              ${s.internalName ? `Internal: ${s.internalName}` : ''}
+              ${s.internalName ? `Internal: ${escapeHtml(s.internalName)}` : ''}
               ${s.internalName && s.customerName ? ' | ' : ''}
-              ${s.customerName ? `Customer: ${s.customerName}` : ''}
+              ${s.customerName ? `Customer: ${escapeHtml(s.customerName)}` : ''}
               ${!s.internalName && !s.customerName ? '—' : ''}
             </span>
-            <a href="${s.gongUrl}" class="snippet-link" target="_blank">↗ Gong</a>
+            <a href="${sanitizeUrl(s.gongUrl)}" class="snippet-link" target="_blank">↗ Gong</a>
             ${s.contextBefore !== undefined ? `<button class="snippet-context-btn" data-snippet-idx="${sortedIdx}">📄 Context</button>` : ''}
           </div>
           ${snippetSizes.length > 0 ? `
@@ -931,9 +936,9 @@ function selectNode(node, nodeEl, rangeStart, rangeEnd) {
           ${c.date}
           <span class="snippet-tag conflict">Conflict</span>
         </div>
-        <div class="snippet-quote">"${boldSizeMentions(c.quote)}"</div>
+        <div class="snippet-quote">"${boldSizeMentions(escapeHtml(c.quote))}"</div>
         <div class="snippet-attribution">
-          <span>${c.note || ''}</span>
+          <span>${escapeHtml(c.note || '')}</span>
         </div>
       </div>
     `;
@@ -1149,13 +1154,13 @@ function renderTable(rangeStart, rangeEnd) {
   } else {
     document.getElementById('tableBody').innerHTML = snippets.map(s => `
       <tr${s.isApprovedMatch ? ' class="approved-match-row"' : ''}>
-        <td><span class="table-entity">${s.entityName}</span>${s.hasOverride ? '<span class="table-override-badge">◆</span>' : ''}${s.isApprovedMatch ? '<span class="table-approved-badge" title="Approved via Match Review">✓</span>' : ''}</td>
-        <td class="table-meta">${(s.type || '').replace('_', ' ')}</td>
-        <td class="table-quote">"${s.quote}"</td>
-        <td class="table-meta">${s.date || '—'}</td>
-        <td class="table-meta">${[s.ae, s.bd].filter(Boolean).join(' / ') || '—'}</td>
-        <td><span class="table-confidence ${s.isConflict ? 'low' : s.confidence}">${s.isConflict ? 'conflict' : s.confidence}</span></td>
-        <td><a href="${s.gongUrl}" class="table-link" target="_blank">↗</a></td>
+        <td><span class="table-entity">${escapeHtml(s.entityName)}</span>${s.hasOverride ? '<span class="table-override-badge">◆</span>' : ''}${s.isApprovedMatch ? '<span class="table-approved-badge" title="Approved via Match Review">✓</span>' : ''}</td>
+        <td class="table-meta">${escapeHtml((s.type || '').replace('_', ' '))}</td>
+        <td class="table-quote">"${escapeHtml(s.quote)}"</td>
+        <td class="table-meta">${escapeHtml(s.date || '—')}</td>
+        <td class="table-meta">${escapeHtml([s.ae, s.bd].filter(Boolean).join(' / ') || '—')}</td>
+        <td><span class="table-confidence ${s.isConflict ? 'low' : s.confidence}">${s.isConflict ? 'conflict' : escapeHtml(s.confidence)}</span></td>
+        <td><a href="${sanitizeUrl(s.gongUrl)}" class="table-link" target="_blank">↗</a></td>
       </tr>
     `).join('');
   }
@@ -1203,22 +1208,22 @@ function showChanges(type) {
 
       let details = '';
       if (type === 'size') {
-        details = `${change.from} people → ${change.to} people`;
+        details = `${escapeHtml(change.from)} people → ${escapeHtml(change.to)} people`;
       } else if (type === 'leadership') {
         details = change.from && change.to
-          ? `${change.from} → ${change.to}`
+          ? `${escapeHtml(change.from)} → ${escapeHtml(change.to)}`
           : change.to
-            ? `New leader: ${change.to}`
+            ? `New leader: ${escapeHtml(change.to)}`
             : 'Leadership change';
       } else if (type === 'reorgs') {
         details = change.from && change.to
-          ? `Moved from ${change.from} to ${change.to}`
+          ? `Moved from ${escapeHtml(change.from)} to ${escapeHtml(change.to)}`
           : 'Organizational change';
       }
 
       html += `
         <div class="change-item" data-entity-id="${change.entityId}">
-          <div class="change-item-entity">${entityName}</div>
+          <div class="change-item-entity">${escapeHtml(entityName)}</div>
           <div class="change-item-details">${details}</div>
           <div class="change-item-date">${formatDateShort(new Date(change.date))}</div>
         </div>

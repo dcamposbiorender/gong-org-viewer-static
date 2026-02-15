@@ -1,6 +1,7 @@
 import { kv, bumpSyncVersion } from './_lib/kv';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateAccount } from './_lib/validation';
+import { setCorsHeaders } from './_lib/cors';
 
 interface MatchDecision {
   manualNode?: string;
@@ -20,11 +21,7 @@ interface CompanyMatchState {
 type MatchCategory = 'approved' | 'rejected' | 'manual';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -49,12 +46,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
-      const { itemId, decision, category, state } = req.body as {
+      const { itemId, decision, category } = req.body as {
         itemId?: string;
         decision?: MatchDecision;
         category?: MatchCategory;
-        state?: CompanyMatchState;
-        user?: string;
       };
 
       // Per-entity read-merge-write (new path)
@@ -76,30 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.json({ success: true, category, itemId });
       }
 
-      // Full state overwrite (legacy path — kept for backward compat during deploy)
-      if (state) {
-        const existing = await kv.get<CompanyMatchState>(kvKey) || {
-          approved: {}, rejected: {}, manual: {}
-        };
-        // Merge incoming state into existing (incoming wins)
-        const merged: CompanyMatchState = {
-          approved: { ...existing.approved, ...(state.approved || {}) },
-          rejected: { ...existing.rejected, ...(state.rejected || {}) },
-          manual: { ...existing.manual, ...(state.manual || {}) },
-        };
-        await kv.set(kvKey, merged);
-        await bumpSyncVersion(account);
-        return res.json({
-          success: true,
-          counts: {
-            approved: Object.keys(merged.approved).length,
-            rejected: Object.keys(merged.rejected).length,
-            manual: Object.keys(merged.manual).length
-          }
-        });
-      }
-
-      return res.status(400).json({ error: 'Either {itemId, decision, category} or {state} required' });
+      return res.status(400).json({ error: '{itemId, decision, category} required' });
     }
 
     if (req.method === 'DELETE') {
