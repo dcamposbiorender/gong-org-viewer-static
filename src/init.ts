@@ -151,6 +151,10 @@ function setMode(mode: 'manual' | 'matchReview'): void {
 // --- Startup ---
 
 (async () => {
+  // Show loading spinner
+  const tree = document.getElementById('tree');
+  if (tree) tree.innerHTML = '<div style="padding: 48px; text-align: center; color: #888;">Loading...</div>';
+
   // Set currentCompany FIRST — all KV loads depend on it
   const companySelect = document.getElementById('companySelect') as HTMLSelectElement;
   setCurrentCompany(companySelect.value as ValidAccount);

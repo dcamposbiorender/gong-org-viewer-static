@@ -7,8 +7,8 @@ import { getSizeOverrideKey } from './state';
 import { getFieldValue, hasMatchReviewData } from './kv';
 import { setManualEvidenceSnippets, showManualSnippetContext } from './snippet-context';
 
-/** Get approved match review items for a manual node. */
-export function getApprovedMatchesForNode(company: string, nodeName: string): any[] {
+/** Get approved match review items for a manual node. Matches by ID first, falls back to name. */
+export function getApprovedMatchesForNode(company: string, nodeName: string, nodeId?: string): any[] {
   if (!hasMatchReviewData(company)) return [];
   if (!matchReviewState[company]?.approved) return [];
 
@@ -16,7 +16,10 @@ export function getApprovedMatchesForNode(company: string, nodeName: string): an
   const items = MATCH_REVIEW_DATA?.companies[company]?.items || [];
 
   Object.entries(matchReviewState[company].approved).forEach(([itemId, approval]: [string, any]) => {
-    if (approval.manualNode === nodeName) {
+    // Match by ID first (survives renames), fall back to name for legacy data
+    const matchById = nodeId && approval.manualNodeId === nodeId;
+    const matchByName = approval.manualNode === nodeName;
+    if (matchById || matchByName) {
       const item = items.find((i: any) => i.id === itemId);
       if (item) approvedItems.push(item);
     }

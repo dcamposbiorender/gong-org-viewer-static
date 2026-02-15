@@ -10,11 +10,11 @@ import {
 let _renderMatchReview: ((company: string) => void) | null = null;
 export function registerMatchRenderer(fn: (company: string) => void): void { _renderMatchReview = fn; }
 
-export function approveMatch(company: string, itemId: string, manualNode: string, manualPath: string): void {
+export function approveMatch(company: string, itemId: string, manualNode: string, manualPath: string, manualNodeId?: string): void {
   initMatchReviewState(company);
   delete matchReviewState[company].rejected[itemId];
   delete matchReviewState[company].manual[itemId];
-  const decision = { manualNode, manualPath, approvedAt: new Date().toISOString() };
+  const decision = { manualNode, manualNodeId: manualNodeId || '', manualPath, approvedAt: new Date().toISOString() };
   matchReviewState[company].approved[itemId] = decision;
   saveMatchReviewState(company);
   saveMatchReviewItemToKV(company, itemId, decision, 'approved');

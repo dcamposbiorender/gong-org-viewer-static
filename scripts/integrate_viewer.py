@@ -21,6 +21,7 @@ import json
 import os
 import re
 import argparse
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any
@@ -218,7 +219,7 @@ def generate_match_review_from_auto_map(company: str, auto_map: Dict, manual_map
                 }
 
             item = {
-                "id": f"{company}_{name_lower.replace(' ', '_')}_{len(unmatched_items)}",
+                "id": f"{company}_{name_lower.replace(' ', '_')}_{hashlib.md5((company + ':' + name_lower + ':' + parent_name).encode()).hexdigest()[:8]}",
                 "company": company,
                 "gong_entity": name,
                 "gong_parent": parent_name,

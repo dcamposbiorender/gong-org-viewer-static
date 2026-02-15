@@ -59,10 +59,16 @@ export function showManageEntitiesModal(): void {
 
   switchManageEntitiesTab('create');
   document.getElementById('manageEntitiesModal')!.style.display = 'flex';
+  // Disable company dropdown while modal is open
+  const companySelect = document.getElementById('companySelect') as HTMLSelectElement;
+  if (companySelect) companySelect.disabled = true;
 }
 
 export function closeManageEntitiesModal(): void {
   document.getElementById('manageEntitiesModal')!.style.display = 'none';
+  // Re-enable company dropdown
+  const companySelect = document.getElementById('companySelect') as HTMLSelectElement;
+  if (companySelect) companySelect.disabled = false;
 }
 
 export function switchManageEntitiesTab(tab: string): void {

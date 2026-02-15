@@ -20,8 +20,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  // Use a global key for resolutions (not per-account since conflicts span entities)
-  const kvKey = 'resolutions:global';
+  // Per-account key (prevents cross-company pollution)
+  const validation = validateAccount(req.query.account as string | undefined);
+  if (!validation.isValid) return res.status(400).json({ error: validation.error });
+  const account = validation.account;
+  const kvKey = `resolutions:${account}`;
 
   try {
     if (req.method === 'GET') {
@@ -48,11 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
 
       await kv.set(kvKey, data);
-      // Bump per-account sync version if account provided (so client polling detects change)
-      const validation = validateAccount(req.query.account as string | undefined);
-      if (validation.isValid) {
-        await bumpSyncVersion(validation.account!);
-      }
+      await bumpSyncVersion(account);
       return res.json({ success: true, savedCount: Object.keys(data).length });
     }
 
