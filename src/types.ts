@@ -107,6 +107,9 @@ export interface MatchDecision {
 }
 
 // --- Match review data (what MATCH_REVIEW_DATA looks like) ---
+// Note: These use snake_case field names because they model raw Python pipeline
+// output. The viewer types above (OrgNode, Snippet, etc.) use camelCase because
+// integrate_viewer.py converts them during the snake_case → camelCase transform.
 
 export interface MatchReviewItem {
   id: string;

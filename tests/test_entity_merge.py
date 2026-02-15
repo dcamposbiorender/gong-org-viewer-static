@@ -1,12 +1,12 @@
 """
 Tests for Entity Merge & Alias Persistence feature (frontend behavior).
-Tests are against public/index.html - checking that HTML elements and JS functions exist.
+Tests are against index.html - checking that HTML elements and JS functions exist.
 """
 import re
 from pathlib import Path
+from conftest import get_index_html_path
 
 PROJECT_ROOT = Path(__file__).parent.parent
-INDEX_HTML_PATH = PROJECT_ROOT / 'index.html'
 
 
 def get_html():
@@ -16,7 +16,7 @@ def get_html():
     instead of inline in index.html. This function concatenates
     them all so existing regex-based tests still work.
     """
-    html = INDEX_HTML_PATH.read_text(encoding='utf-8')
+    html = get_index_html_path().read_text(encoding='utf-8')
     js_dir = PROJECT_ROOT / 'public' / 'js'
     for js_file in sorted(js_dir.glob('*.js')):
         # Skip data files (gitignored, pipeline-generated)

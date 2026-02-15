@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'scripts'))
 
-INDEX_HTML_PATH = PROJECT_ROOT / 'index.html'
+from conftest import get_index_html_path
 
 
 class TestNormalizeEntityName:
@@ -194,7 +194,7 @@ class TestNormalizationParity:
 
         # Verify the JS function uses the same regex pattern
         # After modularization, JS code lives in separate files under public/js/
-        html = INDEX_HTML_PATH.read_text(encoding='utf-8')
+        html = get_index_html_path().read_text(encoding='utf-8')
         js_dir = PROJECT_ROOT / 'public' / 'js'
         for js_file in sorted(js_dir.glob('*.js')):
             if js_file.name not in ('data.js', 'manual-data.js', 'match-review-data.js'):
