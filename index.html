@@ -50,7 +50,7 @@
         <button id="tableViewBtn">Table</button>
       </div>
       <button class="reset-btn" id="resetAllBtn">Reset Overrides</button>
-      <button class="reset-btn" id="manageEntitiesBtn" onclick="showManageEntitiesModal()" title="Create or delete entities in Manual Map">
+      <button class="reset-btn" id="manageEntitiesBtn" title="Create or delete entities in Manual Map">
         Manage Entities
       </button>
     </div>
@@ -110,7 +110,7 @@
   <div class="resolve-modal-content" style="max-width: 500px; max-height: 80vh;">
     <div class="resolve-modal-header">
       <h3>Pick Entity for Match</h3>
-      <button class="changes-modal-close" onclick="closeEntityPickerModal()">&times;</button>
+      <button class="changes-modal-close" id="closeEntityPickerBtn">&times;</button>
     </div>
     <div class="resolve-modal-body" style="padding: 16px;">
       <div style="margin-bottom: 12px;">
@@ -123,7 +123,7 @@
       </div>
     </div>
     <div class="resolve-modal-footer">
-      <button class="resolve-btn resolve-btn-cancel" onclick="closeEntityPickerModal()">Cancel</button>
+      <button class="resolve-btn resolve-btn-cancel" id="cancelEntityPickerBtn">Cancel</button>
     </div>
   </div>
 </div>
@@ -133,14 +133,14 @@
   <div class="resolve-modal-content" style="max-width: 550px; max-height: 85vh;">
     <div class="resolve-modal-header">
       <h3>Manage Entities</h3>
-      <button class="changes-modal-close" onclick="closeManageEntitiesModal()">&times;</button>
+      <button class="changes-modal-close" id="closeManageEntitiesBtn">&times;</button>
     </div>
     <div class="resolve-modal-body" style="padding: 16px;">
       <!-- Tab buttons -->
       <div style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #e0e0e0; padding-bottom: 12px;">
-        <button id="createEntityTab" class="reset-btn" style="flex: 1;" onclick="switchManageEntitiesTab('create')">Create Entity</button>
-        <button id="deleteEntityTab" class="reset-btn" style="flex: 1; opacity: 0.6;" onclick="switchManageEntitiesTab('delete')">Delete Entity</button>
-        <button id="mergeEntityTab" class="reset-btn" style="flex: 1; opacity: 0.6;" onclick="switchManageEntitiesTab('merge')">Merge Entities</button>
+        <button id="createEntityTab" class="reset-btn" style="flex: 1;">Create Entity</button>
+        <button id="deleteEntityTab" class="reset-btn" style="flex: 1; opacity: 0.6;">Delete Entity</button>
+        <button id="mergeEntityTab" class="reset-btn" style="flex: 1; opacity: 0.6;">Merge Entities</button>
       </div>
 
       <!-- Create Entity Form -->
@@ -151,7 +151,7 @@
           <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Parent Entity *</label>
           <input type="text" id="createEntityParentSearch" placeholder="Search for parent entity..."
                  style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 4px;"
-                 oninput="filterCreateEntityParentList()">
+                 id="createEntityParentSearchInput">
           <div id="createEntityParentList" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; display: none;">
             <!-- Populated by JS -->
           </div>
@@ -178,7 +178,7 @@
                  style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
         </div>
 
-        <button class="resolve-btn resolve-btn-confirm" style="width: 100%;" onclick="createNewEntity()">Create Entity</button>
+        <button class="resolve-btn resolve-btn-confirm" style="width: 100%;" id="createEntityBtn">Create Entity</button>
       </div>
 
       <!-- Delete Entity Form -->
@@ -188,7 +188,7 @@
         <div style="margin-bottom: 12px;">
           <input type="text" id="deleteEntitySearch" placeholder="Search for entity to delete..."
                  style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
-                 oninput="filterDeleteEntityList()">
+                 id="deleteEntitySearchInput">
         </div>
         <div id="deleteEntityList" style="max-height: 300px; overflow-y: auto;">
           <!-- Populated by JS -->
@@ -200,8 +200,8 @@
             <span id="deleteEntityChildrenWarning" style="display: none; color: #c9302c;"><br>This will also delete all children!</span>
           </p>
           <div style="display: flex; gap: 8px;">
-            <button class="resolve-btn resolve-btn-cancel" onclick="cancelDeleteEntity()">Cancel</button>
-            <button class="resolve-btn" style="background: #c9302c; color: white;" onclick="confirmDeleteEntity()">Delete</button>
+            <button class="resolve-btn resolve-btn-cancel" id="cancelDeleteBtn">Cancel</button>
+            <button class="resolve-btn" style="background: #c9302c; color: white;" id="confirmDeleteBtn">Delete</button>
           </div>
         </div>
       </div>
@@ -215,7 +215,7 @@
           <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Entity A (will be absorbed) *</label>
           <input type="text" id="mergeEntityASearch" placeholder="Search for entity to absorb..."
                  style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 4px;"
-                 oninput="filterMergeEntityAList()">
+                 id="mergeEntityASearchInput">
           <div id="mergeEntityAList" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; display: none;"></div>
           <div id="mergeEntityASelected" style="padding: 8px; background: #fff3cd; border-radius: 4px; font-size: 13px; display: none;"></div>
         </div>
@@ -225,7 +225,7 @@
           <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Entity B (canonical - keeps name) *</label>
           <input type="text" id="mergeEntityBSearch" placeholder="Search for canonical entity..."
                  style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 4px;"
-                 oninput="filterMergeEntityBList()">
+                 id="mergeEntityBSearchInput">
           <div id="mergeEntityBList" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; display: none;"></div>
           <div id="mergeEntityBSelected" style="padding: 8px; background: #d4edda; border-radius: 4px; font-size: 13px; display: none;"></div>
         </div>
@@ -239,7 +239,7 @@
         <!-- Validation error -->
         <div id="mergeValidationError" style="display: none; margin-bottom: 12px; padding: 8px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24; font-size: 13px;"></div>
 
-        <button id="mergeConfirmBtn" class="resolve-btn resolve-btn-confirm" style="width: 100%; opacity: 0.5;" disabled onclick="executeMergeFromTab()">Merge Entities</button>
+        <button id="mergeConfirmBtn" class="resolve-btn resolve-btn-confirm" style="width: 100%; opacity: 0.5;" disabled>Merge Entities</button>
       </div>
     </div>
   </div>
@@ -255,7 +255,7 @@
         <div id="snippetContextMeta" style="font-size: 12px; color: #666; margin-top: 4px;"></div>
         <a id="snippetContextGongLink" href="#" target="_blank" style="font-size: 11px; color: #2563eb; display: none;">↗ Open in Gong</a>
       </div>
-      <button class="changes-modal-close" onclick="closeSnippetContextModal()">&times;</button>
+      <button class="changes-modal-close" id="closeSnippetContextBtn">&times;</button>
     </div>
     <div class="resolve-modal-body" id="snippetContextBody"
       style="font-family: 'Georgia', serif; line-height: 1.7; font-size: 14px; max-height: 60vh; overflow-y: auto;">
@@ -381,28 +381,12 @@
 </div>
 
 
-<!-- Data (pipeline-generated) -->
+<!-- Data (pipeline-generated, loaded at runtime by init.ts via globals) -->
 <script src="/js/data.js"></script>
 <script src="/js/manual-data.js"></script>
 <script src="/js/match-review-data.js"></script>
 
-
-<!-- App (tracked in git, ~4K lines total) -->
-<script src="/js/state.js"></script>
-<script src="/js/utils.js"></script>
-<script src="/js/tree-ops.js"></script>
-<script src="/js/kv-api.js"></script>
-<script src="/js/rendering.js"></script>
-<script src="/js/evidence.js"></script>
-<script src="/js/match-review.js"></script>
-<script src="/js/manage-entities.js"></script>
-<script src="/js/entity-merge.js"></script>
-<script src="/js/manual-map-view.js"></script>
-<script src="/js/conflict-resolution.js"></script>
-<script src="/js/autosave-sync.js"></script>
-<script src="/js/init.js"></script>
-
-<!-- Vite module entry point (Phase 1a shim — new TS code loads here) -->
+<!-- App (TypeScript ES modules, bundled by Vite) -->
 <script type="module" src="/src/init.ts"></script>
 
 </body>
