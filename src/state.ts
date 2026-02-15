@@ -82,3 +82,9 @@ export function kvApiUrl(endpoint: string, account: string): string {
   if (!account) throw new Error('[KV] account parameter required for ' + endpoint);
   return '/api/' + endpoint + '?account=' + account.toLowerCase();
 }
+
+/** URL for consolidated org-state endpoint. */
+export function orgStateUrl(type: string, account: string): string {
+  if (!account) throw new Error('[KV] account parameter required for ' + type);
+  return '/api/org-state?account=' + account.toLowerCase() + '&type=' + type;
+}

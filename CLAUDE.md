@@ -92,17 +92,15 @@ The viewer uses 10-second polling for multi-user sync (1-3 users):
 
 | Endpoint | Purpose |
 |----------|---------|
-| `/api/corrections` | Hierarchy overrides |
-| `/api/field-edits` | Name/title edits |
-| `/api/match-review` | Match decisions |
-| `/api/merges` | Entity consolidation |
-| `/api/graduated-map` | Manual map persistence (KV overlay) |
-| `/api/sizes` | Team size overrides |
-| `/api/resolutions` | Gong vs public data conflicts |
-| `/api/autosave` | Session state snapshots |
+| `/api/org-state?type=X` | **NEW consolidated endpoint** — replaces 7 routes below |
+| `/api/match-review` | Match decisions (kept separate — different merge logic) |
 | `/api/sync-version` | Multi-user sync version polling |
-| `/api/manual-map-overrides` | Manual map drag-drop reparenting |
-| `/api/manual-map-modifications` | Manual map add/delete entities |
+| `/api/autosave` | Session state snapshots |
+
+**org-state types:** corrections, field-edits, sizes, merges, graduated-map, manual-map-overrides, manual-map-modifications, resolutions
+
+**Legacy endpoints** (still functional, client migrating to org-state):
+`/api/corrections`, `/api/field-edits`, `/api/sizes`, `/api/merges`, `/api/graduated-map`, `/api/manual-map-overrides`, `/api/manual-map-modifications`, `/api/resolutions`
 
 All endpoints: CORS enabled, `Cache-Control: no-store`, account validation via `?account=` param.
 
