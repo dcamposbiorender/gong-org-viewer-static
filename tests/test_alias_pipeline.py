@@ -192,15 +192,11 @@ class TestNormalizationParity:
             assert result == expected, \
                 f"Python normalize('{input_name}') = '{result}', expected '{expected}'"
 
-        # Verify the JS function uses the same regex pattern
-        # After modularization, JS code lives in separate files under public/js/
-        html = get_index_html_path().read_text(encoding='utf-8')
-        js_dir = PROJECT_ROOT / 'public' / 'js'
-        for js_file in sorted(js_dir.glob('*.js')):
-            if js_file.name not in ('data.js', 'manual-data.js', 'match-review-data.js'):
-                html += '\n' + js_file.read_text(encoding='utf-8')
-        js_match = re.search(r"function normalizeEntityName\([^)]*\)\s*\{([\s\S]*?)\n\}", html)
-        assert js_match, "JS normalizeEntityName not found"
+        # Verify the TS function uses the same regex pattern
+        # After Phase 1b migration, code lives in src/*.ts
+        ts_utils = (PROJECT_ROOT / 'src' / 'utils.ts').read_text(encoding='utf-8')
+        js_match = re.search(r"function normalizeEntityName\([^)]*\)[^{]*\{([\s\S]*?)\n\}", ts_utils)
+        assert js_match, "TS normalizeEntityName not found in src/utils.ts"
         js_body = js_match.group(1)
 
         # Check that both use the same suffix list anchored to end of string
