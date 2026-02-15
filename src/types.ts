@@ -95,7 +95,8 @@ export interface Override {
 
 export interface SizeOverride {
   selectedSizeIndex?: number | null;
-  customValue?: string;
+  customValue?: string | null;
+  updatedAt?: string;
 }
 
 export interface MatchDecision {
