@@ -78,6 +78,19 @@ export function isDescendant(parentId: string, childId: string, tree: OrgNode): 
   return check(parent);
 }
 
+/** Find parent of a node in a tree. */
+export function findNodeParent(node: OrgNode | null, targetId: string, parent: OrgNode | null = null): OrgNode | null {
+  if (!node) return null;
+  if (node.id === targetId) return parent;
+  if (node.children) {
+    for (const child of node.children) {
+      const found = findNodeParent(child, targetId, node);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 export function findNodeInTree(node: OrgNode, id: string): OrgNode | null {
   if (node.id === id) return node;
   if (node.children) {
