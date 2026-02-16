@@ -38,7 +38,7 @@
     "node_modules",
     "scripts",
     "public/js",
-    "api",
+    "_legacy_api",
     "src"
   ]
 }

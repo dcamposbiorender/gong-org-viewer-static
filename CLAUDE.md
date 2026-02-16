@@ -46,7 +46,7 @@ components/                         # (Phase 3 — all UI components)
 | Directory | Purpose |
 |-----------|---------|
 | `src/` | Old Vite TypeScript modules (reference only) |
-| `api/` | Old standalone serverless functions (reference only) |
+| `_legacy_api/` | Old standalone serverless functions (reference only) |
 | `public/js/` | Old viewer JS modules (reference only) |
 | `public/css/` | Old 1,866-line CSS (reference only) |
 

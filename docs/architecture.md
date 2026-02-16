@@ -74,7 +74,7 @@ GongOrgViewerStatic/
 │   └── {company}_true_auto_map.json
 ├── "Manual Maps Jan 26 2026"/{company}_rd_map.json
 ├── src/                                        # Legacy Vite TS (reference, excluded from build)
-├── api/                                        # Legacy serverless (reference, excluded from build)
+├── _legacy_api/                                # Legacy serverless (reference, excluded from build)
 └── public/js/                                  # Legacy viewer JS (reference)
 ```
 
