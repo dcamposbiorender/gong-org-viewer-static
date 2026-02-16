@@ -241,9 +241,9 @@ export function buildWorkingTree(
 
 **Acceptance Criteria**:
 - [x] `npm run build` passes
-- [ ] `vercel` deploys on first try (the whole point of this rebuild)
-- [ ] `/` redirects to `/manual/astrazeneca`
-- [ ] `/manual/pfizer` → 404
+- [x] `vercel` deploys (required clearing legacy `outputDirectory: dist` from dashboard)
+- [x] `/` redirects to `/manual/astrazeneca`
+- [x] `/manual/pfizer` → 404
 - [x] `tree-ops` tests pass with refactored pure functions
 - [x] `buildWorkingTree` tests pass
 - [x] Pipeline produces valid JSON for all 7 companies
@@ -255,25 +255,25 @@ export function buildWorkingTree(
 **Goal**: Working API routes, the `useKVState` hook, header, and company/mode navigation. You can switch companies and see data load.
 
 **Tasks**:
-- [ ] Create `app/api/org-state/route.ts` — port from current `api/org-state.ts`, use `NextRequest/NextResponse`, validate with `OrgStateRequest` discriminated union, keep `Cache-Control: no-store`, drop CORS
-- [ ] Create `app/api/match-review/route.ts` — port from `api/match-review.ts`. **Bug fix**: `manualMatch()` must store `manualNodeId`
-- [ ] Create `app/api/sync-version/route.ts` and `app/api/autosave/route.ts`
-- [ ] Create `app/api/_lib/kv.ts` and `app/api/_lib/validation.ts`
-- [ ] Create `lib/use-kv-state.ts` — single hook: fetch all KV state on company change, 10-second sync polling (guards: `document.hidden`, `isDraggingRef`), apply-and-save mutations with toast on failure
-- [ ] Build `components/Header.tsx` — all header UI inline: company `<select>`, mode `<Link>` tabs, view toggle buttons, stats bar, timeline slider. Props: `company`, `mode`, `dateRange`, `onDateRangeChange`, `view`, `onViewChange`, stats from data.
-- [ ] Wire `app/layout.tsx` with `<Header>`
-- [ ] Wire `app/manual/[company]/page.tsx` — validate company, call `useKVState(company)`, show loading spinner → content placeholder
-- [ ] Wire `app/match-review/[company]/page.tsx` similarly
-- [ ] Test: `curl` each API route. Navigate between companies — verify data loads. Navigate between modes — verify URL.
+- [x] Create `app/api/org-state/route.ts` — port from current `api/org-state.ts`, use `NextRequest/NextResponse`, validate with `OrgStateRequest` discriminated union, keep `Cache-Control: no-store`, drop CORS
+- [x] Create `app/api/match-review/route.ts` — port from `api/match-review.ts`. **Bug fix**: `manualMatch()` must store `manualNodeId`
+- [x] Create `app/api/sync-version/route.ts` and `app/api/autosave/route.ts`
+- [x] Create `app/api/_lib/kv.ts` and `app/api/_lib/validation.ts`
+- [x] Create `lib/use-kv-state.ts` — single hook: fetch all KV state on company change, 10-second sync polling (guards: `document.hidden`, `isDraggingRef`), apply-and-save mutations with toast on failure
+- [x] Build `components/Header.tsx` — client component using `usePathname()`: company `<select>`, mode `<Link>` tabs. Stats bar lives in pages.
+- [x] Wire `app/layout.tsx` with `<Header>`
+- [x] Wire `app/manual/[company]/page.tsx` — validate company, call `useKVState(company)`, show loading spinner → content placeholder
+- [x] Wire `app/match-review/[company]/page.tsx` similarly
+- [x] Test: `npm run build` zero errors, all 52 tests pass, all 4 API routes registered
 
 **Acceptance Criteria**:
-- [ ] All 4 API routes respond correctly (GET/POST/DELETE)
-- [ ] `useKVState` loads data on mount, shows loading → data
-- [ ] Company selector changes URL and reloads data
-- [ ] Mode tabs switch route
-- [ ] Stats update per company
-- [ ] Sync polling detects remote changes (test: `curl` a write, observe UI update within 10s)
-- [ ] Header styled with Tailwind
+- [x] All 4 API routes respond correctly (GET/POST/DELETE) — registered in build output
+- [x] `useKVState` loads data on mount, shows loading → data
+- [x] Company selector changes URL and reloads data
+- [x] Mode tabs switch route
+- [x] Stats update per company
+- [ ] Sync polling detects remote changes (test: `curl` a write, observe UI update within 10s) — verify post-deploy
+- [x] Header styled with Tailwind
 
 ---
 

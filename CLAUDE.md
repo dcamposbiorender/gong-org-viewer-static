@@ -6,7 +6,7 @@ Org chart viewer rebuilt as **Next.js 15 + React + Tailwind**. Extracts org stru
 
 **Two modes**: Org Map (manual map) and Match Review. No auto map — removed Feb 2026.
 
-**Rebuild status**: Phase 1 complete (scaffold, types, pipeline JSON). Phases 2-4 in progress.
+**Rebuild status**: Phase 1-2 complete. Phase 3-4 in progress.
 **Branch**: `feat/rebuild-v2`
 **Plan**: `docs/plans/2026-02-15-feat-nextjs-react-rebuild-plan.md`
 
@@ -22,23 +22,25 @@ app/
 ├── manual/[company]/page.tsx       # Manual Map (tree + table toggle)
 ├── match-review/[company]/page.tsx # Match Review
 ├── not-found.tsx                   # Invalid company
-├── api/                            # (Phase 2 — not yet created)
-│   ├── org-state/route.ts          # Consolidated KV CRUD
-│   ├── match-review/route.ts       # Match decisions
+├── api/
+│   ├── org-state/route.ts          # Consolidated KV CRUD (8 state types)
+│   ├── match-review/route.ts       # Match decisions (manualNodeId bug fixed)
 │   ├── sync-version/route.ts       # Polling endpoint
 │   └── autosave/route.ts           # Session snapshots
 │   └── _lib/
-│       ├── kv.ts                   # @vercel/kv client
-│       └── validation.ts           # Account validation
+│       ├── kv.ts                   # @vercel/kv client (static_KV_* env vars)
+│       └── validation.ts           # Account validation (discriminated union)
 
 lib/
 ├── types.ts                        # All TypeScript interfaces + KV state types
 ├── tree-ops.ts                     # Pure tree traversal (no global state)
 ├── build-working-tree.ts           # Pure: applies overlays to produce display tree
 ├── utils.ts                        # Formatting, date range, normalization
-├── use-kv-state.ts                 # (Phase 2 — single hook for all KV data)
+├── use-kv-state.ts                 # Single hook: fetch, sync poll, mutations
 
-components/                         # (Phase 3 — all UI components)
+components/
+├── Header.tsx                      # Company select + mode tabs (usePathname)
+                                    # (Phase 3 — remaining UI components)
 ```
 
 ### Legacy code (still in repo, excluded from build)
@@ -145,6 +147,10 @@ batches_enriched/ → extract → extractions/ → consolidate → output/ → b
 | Tree operations (pure) | `lib/tree-ops.ts` |
 | Working tree builder (pure) | `lib/build-working-tree.ts` |
 | Utility functions | `lib/utils.ts` |
+| KV state hook | `lib/use-kv-state.ts` |
+| KV client (server) | `app/api/_lib/kv.ts` |
+| Account validation (server) | `app/api/_lib/validation.ts` |
+| Header component | `components/Header.tsx` |
 | Next.js config | `next.config.ts` |
 | Tailwind/PostCSS | `postcss.config.mjs`, `app/globals.css` |
 | Tests | `lib/*.test.ts` (52 tests) |
