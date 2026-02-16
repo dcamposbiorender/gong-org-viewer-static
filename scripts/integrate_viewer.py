@@ -875,17 +875,59 @@ def preview(data: Dict, manual_data: Dict, match_review: Dict):
     print(f"Total MATCH_REVIEW_DATA size: {len(json.dumps(match_review)):,} bytes")
 
 
+def export_per_company_json(manual_data: Dict, match_review: Dict):
+    """Export per-company JSON files for Next.js app.
+
+    Writes:
+      public/data/{company}/manual.json
+      public/data/{company}/match-review.json
+    """
+    data_dir = PUBLIC_DIR / "data"
+    print(f"\nWriting per-company JSON to {data_dir}/...")
+
+    for company in COMPANIES:
+        company_dir = data_dir / company
+        company_dir.mkdir(parents=True, exist_ok=True)
+
+        # Manual map data
+        company_manual = manual_data.get(company)
+        if company_manual:
+            manual_path = company_dir / "manual.json"
+            with open(manual_path, "w") as f:
+                json.dump(company_manual, f)
+            size = manual_path.stat().st_size
+            print(f"  {company}/manual.json ({size:,} bytes)")
+        else:
+            print(f"  {company}/manual.json (skipped — no data)")
+
+        # Match review data
+        company_review = match_review.get("companies", {}).get(company)
+        review_obj = {
+            "generated": match_review.get("generated", ""),
+            **(company_review or {"total_unmatched": 0, "items": []})
+        }
+        review_path = company_dir / "match-review.json"
+        with open(review_path, "w") as f:
+            json.dump(review_obj, f)
+        size = review_path.stat().st_size
+        print(f"  {company}/match-review.json ({size:,} bytes)")
+
+    print("✓ Per-company JSON export complete")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Integrate enriched data into viewer")
     parser.add_argument("--preview", action="store_true", help="Preview what would be updated")
     parser.add_argument("--update", action="store_true", help="Actually update index.html")
     parser.add_argument("--export-json", action="store_true", help="Export data files only")
+    parser.add_argument("--json", action="store_true",
+                        help="Export per-company JSON for Next.js (public/data/{company}/)")
 
     args = parser.parse_args()
 
-    if not any([args.preview, args.update, args.export_json]):
+    if not any([args.preview, args.update, args.export_json, args.json]):
         parser.print_help()
-        print("\nNo action specified. Use --preview, --update, or --export-json")
+        print("\nNo action specified. Use --preview, --update, --export-json, or --json")
         return
 
     # Generate data
@@ -896,6 +938,9 @@ def main():
 
     if args.export_json:
         export_json(data, manual_data, match_review)
+
+    if args.json:
+        export_per_company_json(manual_data, match_review)
 
     if args.update:
         success = update_viewer(data, manual_data, match_review)

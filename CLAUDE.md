@@ -2,18 +2,60 @@
 
 ## What This Is
 
-Static org chart viewer. Extracts org structure from Gong call transcripts, displays for user review/correction.
+Org chart viewer rebuilt as **Next.js 15 + React + Tailwind**. Extracts org structure from Gong call transcripts, displays for user review/correction.
 
 **Two modes**: Org Map (manual map) and Match Review. No auto map — removed Feb 2026.
 
-**Full architecture**: `docs/architecture.md`
+**Rebuild status**: Phase 1 complete (scaffold, types, pipeline JSON). Phases 2-4 in progress.
+**Branch**: `feat/rebuild-v2`
+**Plan**: `docs/plans/2026-02-15-feat-nextjs-react-rebuild-plan.md`
+
+---
+
+## Architecture (Next.js Rebuild)
+
+```
+app/
+├── layout.tsx                      # Header + global layout
+├── page.tsx                        # Redirect / → /manual/astrazeneca
+├── globals.css                     # Tailwind import
+├── manual/[company]/page.tsx       # Manual Map (tree + table toggle)
+├── match-review/[company]/page.tsx # Match Review
+├── not-found.tsx                   # Invalid company
+├── api/                            # (Phase 2 — not yet created)
+│   ├── org-state/route.ts          # Consolidated KV CRUD
+│   ├── match-review/route.ts       # Match decisions
+│   ├── sync-version/route.ts       # Polling endpoint
+│   └── autosave/route.ts           # Session snapshots
+│   └── _lib/
+│       ├── kv.ts                   # @vercel/kv client
+│       └── validation.ts           # Account validation
+
+lib/
+├── types.ts                        # All TypeScript interfaces + KV state types
+├── tree-ops.ts                     # Pure tree traversal (no global state)
+├── build-working-tree.ts           # Pure: applies overlays to produce display tree
+├── utils.ts                        # Formatting, date range, normalization
+├── use-kv-state.ts                 # (Phase 2 — single hook for all KV data)
+
+components/                         # (Phase 3 — all UI components)
+```
+
+### Legacy code (still in repo, excluded from build)
+
+| Directory | Purpose |
+|-----------|---------|
+| `src/` | Old Vite TypeScript modules (reference only) |
+| `api/` | Old standalone serverless functions (reference only) |
+| `public/js/` | Old viewer JS modules (reference only) |
+| `public/css/` | Old 1,866-line CSS (reference only) |
 
 ---
 
 ## Pipeline (Memorize This)
 
 ```
-batches_enriched/ → extract → extractions/ → consolidate → output/ → build_map → integrate → index.html
+batches_enriched/ → extract → extractions/ → consolidate → output/ → build_map → integrate → JSON
 ```
 
 | Step | Script | Output |
@@ -21,11 +63,9 @@ batches_enriched/ → extract → extractions/ → consolidate → output/ → b
 | 1. Extract | `extract_*.py` | `extractions/{co}/entities_llm_v2.json` |
 | 2. Consolidate | `consolidate_with_hierarchy.py` | `output/{co}/consolidated_with_hierarchy.json` |
 | 3. Build Map | `build_true_auto_map.py` | `output/{co}_true_auto_map.json` |
-| 4. Integrate | `integrate_viewer.py` | `public/js/data.js`, `manual-data.js`, `match-review-data.js` |
+| 4. Integrate | `integrate_viewer.py --json` | `public/data/{co}/manual.json`, `match-review.json` |
 
-**Note:** `build_true_auto_map.py` still runs — its output is used to enrich MANUAL_DATA with Gong evidence and to generate MATCH_REVIEW_DATA. But the auto map is NOT injected into the viewer (`DATA = {}` stub).
-
-`integrate_viewer.py --update` writes standalone JS files to `public/js/`. It no longer modifies `index.html`.
+**New**: `--json` flag outputs per-company JSON to `public/data/{company}/`. Old `--update` flag still works for legacy JS format.
 
 ---
 
@@ -41,19 +81,13 @@ batches_enriched/ → extract → extractions/ → consolidate → output/ → b
 | Gong URL | `gong_url` | `gongUrl` |
 | Speaker | `speaker_id` | `customerName`/`internalName` |
 
-**Extraction formats differ by company:**
-- GSK/AZ/Novartis: `value`, `type`, `speaker_id`
-- AbbVie/others: `entity_name`, `entity_type`, NO `speaker_id`
-
 ---
 
-## Viewer Data Structure
+## Data Structure (JSON files)
 
-```javascript
-// DATA is an empty stub (auto map removed)
-DATA = {}
-
-MANUAL_DATA[company] = {
+```typescript
+// public/data/{company}/manual.json
+{
   company: "Display Name",
   source: "Manual Map - Display Name",
   stats: { entities, matched, snippets },
@@ -64,14 +98,11 @@ MANUAL_DATA[company] = {
   }
 }
 
-MATCH_REVIEW_DATA = {
+// public/data/{company}/match-review.json
+{
   generated: "ISO timestamp",
-  companies: {
-    [company]: {
-      total_unmatched: N,
-      items: [{ id, gong_entity, snippet, llm_suggested_match, ... }]
-    }
-  }
+  total_unmatched: N,
+  items: [{ id, gong_entity, snippet, llm_suggested_match, ... }]
 }
 ```
 
@@ -79,7 +110,7 @@ MATCH_REVIEW_DATA = {
 
 ## Multi-User Sync
 
-The viewer uses 10-second polling for multi-user sync (1-3 users):
+10-second polling for multi-user sync (1-3 users):
 
 1. Every KV write bumps `sync-version:{account}` key (except autosave)
 2. Client polls `/api/sync-version` every 10 seconds
@@ -92,17 +123,12 @@ The viewer uses 10-second polling for multi-user sync (1-3 users):
 
 | Endpoint | Purpose |
 |----------|---------|
-| `/api/org-state?type=X` | **NEW consolidated endpoint** — replaces 7 routes below |
-| `/api/match-review` | Match decisions (kept separate — different merge logic) |
-| `/api/sync-version` | Multi-user sync version polling |
-| `/api/autosave` | Session state snapshots |
+| `/api/org-state?type=X&account=Y` | Consolidated KV CRUD (8 state types) |
+| `/api/match-review?account=Y` | Match decisions |
+| `/api/sync-version?account=Y` | Multi-user sync version polling |
+| `/api/autosave?account=Y` | Session state snapshots |
 
 **org-state types:** corrections, field-edits, sizes, merges, graduated-map, manual-map-overrides, manual-map-modifications, resolutions
-
-**Legacy endpoints** (still functional, client migrating to org-state):
-`/api/corrections`, `/api/field-edits`, `/api/sizes`, `/api/merges`, `/api/graduated-map`, `/api/manual-map-overrides`, `/api/manual-map-modifications`, `/api/resolutions`
-
-All endpoints: CORS enabled, `Cache-Control: no-store`, account validation via `?account=` param.
 
 ---
 
@@ -114,38 +140,24 @@ All endpoints: CORS enabled, `Cache-Control: no-store`, account validation via `
 | Raw extractions | `extractions/{co}/entities_llm_v2.json` |
 | Auto map (pipeline intermediate) | `output/{co}_true_auto_map.json` |
 | Manual maps (source) | `Manual Maps Jan 26 2026/{co}_rd_map.json` |
-| Viewer HTML shell | `index.html` (project root — Vite entry point) |
-| Vite config | `vite.config.ts` |
-| TypeScript config | `tsconfig.json` (strict mode) |
-| TypeScript types | `src/types.ts` (all interfaces) |
-| Module entry point | `src/init.ts` (Vite shim — Phase 1b will migrate JS here) |
-| Viewer CSS | `public/css/styles.css` |
-| Viewer JS modules | `public/js/*.js` (13 files, ~4,590 lines) |
-| Pipeline-generated data | `public/js/data.js`, `manual-data.js`, `match-review-data.js` (gitignored) |
-| Build output | `dist/` (gitignored — Vite build output) |
-| KV config | `api/_lib/kv.ts` |
-| Account validation | `api/_lib/validation.ts` |
+| Pipeline-generated data | `public/data/{co}/manual.json`, `match-review.json` (gitignored) |
+| TypeScript types | `lib/types.ts` |
+| Tree operations (pure) | `lib/tree-ops.ts` |
+| Working tree builder (pure) | `lib/build-working-tree.ts` |
+| Utility functions | `lib/utils.ts` |
+| Next.js config | `next.config.ts` |
+| Tailwind/PostCSS | `postcss.config.mjs`, `app/globals.css` |
+| Tests | `lib/*.test.ts` (52 tests) |
 | E2E feature spec | `tests/e2e-feature-spec.md` |
 
 ### Build & Deploy
 
 ```bash
-npm run build    # tsc --noEmit && vite build → dist/
-npm run dev      # Vite dev server with HMR
-npm run test     # Vitest (JS unit tests)
-npm install --include=dev  # Required (env has omit=dev)
-vercel           # Deploy dist/ + api/ to Vercel
+npm run build    # next build
+npm run dev      # next dev (with HMR)
+npm run test     # vitest run (52 tests)
+vercel           # Deploy to Vercel (zero config)
 ```
-
-### Viewer JS Module Load Order (Phase 1a — legacy globals)
-
-```
-state.js → utils.js → tree-ops.js → kv-api.js → rendering.js →
-evidence.js → match-review.js → manage-entities.js → entity-merge.js →
-manual-map-view.js → conflict-resolution.js → autosave-sync.js → init.js
-```
-
-All functions are still global (no ES modules yet). Load order enforced by `<script>` tag order in `index.html`. Data files load before app modules. Phase 1b will migrate to ES module imports in `src/`.
 
 ---
 
@@ -155,23 +167,21 @@ All functions are still global (no ES modules yet). Load order enforced by `<scr
 python3 scripts/extract_entities.py --company {co}
 python3 scripts/consolidate_with_hierarchy.py --company {co}
 python3 scripts/build_true_auto_map.py --company {co}
-python3 scripts/integrate_viewer.py --update
+python3 scripts/integrate_viewer.py --json    # Per-company JSON for Next.js
 vercel
 ```
 
 ---
 
-## Viewer Display Rules
+## Valid Companies
 
-- **Leader**: Shows `node.leader.name` or "?, ?" placeholder
-- **Size**: First `sizeMentions[].value` or `node.size`. Shows "no source" if size but no mentions
-- **Snippets**: Filtered by date range, shows quote + customerName + gongUrl link
+`abbvie`, `astrazeneca`, `gsk`, `lilly`, `novartis`, `regeneron`, `roche`
 
 ---
 
 ## Before Making Changes
 
-1. Read `docs/architecture.md` for full data flow
+1. Read the rebuild plan: `docs/plans/2026-02-15-feat-nextjs-react-rebuild-plan.md`
 2. Check which extraction format the company uses
 3. Trace field names through each pipeline stage
-4. Run `python3 -m pytest tests/ -v`
+4. Run `npm run test`

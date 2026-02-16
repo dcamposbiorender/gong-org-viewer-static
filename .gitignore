@@ -23,8 +23,16 @@ public/js/data.js
 public/js/manual-data.js
 public/js/match-review-data.js
 
-# Vite build output
+# Vite build output (legacy)
 dist/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Pipeline-generated data JSON (contains PII)
+public/data/
 
 # Backup files
 public/index.html.backup.*
