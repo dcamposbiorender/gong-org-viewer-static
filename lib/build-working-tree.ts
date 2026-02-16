@@ -69,12 +69,14 @@ function applyModifications(
   modifications: CompanyModifications
 ): void {
   // Apply deletions first
-  for (const deletion of modifications.deleted) {
+  const deleted = Array.isArray(modifications.deleted) ? modifications.deleted : [];
+  for (const deletion of deleted) {
     removeNode(tree, deletion.id);
   }
 
   // Then additions
-  for (const addition of modifications.added) {
+  const added = Array.isArray(modifications.added) ? modifications.added : [];
+  for (const addition of added) {
     const parent = findWorkingNode(tree, addition.parentId);
     if (parent) {
       parent.children.push({

@@ -24,7 +24,7 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-white border-b border-gray-200 px-4 py-3">
+    <header className="bg-white border-b border-[#ddd] px-4 py-3">
       <div className="flex items-center justify-between max-w-screen-xl mx-auto">
         {/* Left: title + company selector */}
         <div className="flex items-center gap-4">
@@ -34,7 +34,7 @@ export default function Header() {
           <select
             value={company}
             onChange={handleCompanyChange}
-            className="border border-gray-300 rounded px-2 py-1 text-sm bg-white"
+            className="text-lg font-semibold bg-transparent border-none cursor-pointer focus:outline-none appearance-none"
           >
             {VALID_ACCOUNTS.map((acct) => (
               <option key={acct} value={acct}>
@@ -50,8 +50,8 @@ export default function Header() {
             href={`/manual/${company}`}
             className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
               mode === "manual"
-                ? "bg-blue-100 text-blue-700"
-                : "text-gray-600 hover:bg-gray-100"
+                ? "bg-[#1a1a1a] text-white"
+                : "text-[#666] hover:bg-[#f5f5f5]"
             }`}
           >
             Org Map
@@ -60,8 +60,8 @@ export default function Header() {
             href={`/match-review/${company}`}
             className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
               mode === "match-review"
-                ? "bg-blue-100 text-blue-700"
-                : "text-gray-600 hover:bg-gray-100"
+                ? "bg-[#1a1a1a] text-white"
+                : "text-[#666] hover:bg-[#f5f5f5]"
             }`}
           >
             Match Review

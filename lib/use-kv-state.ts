@@ -27,6 +27,44 @@ const TYPE_TO_KEY: Record<StateType, keyof OrgState> = {
   "resolutions": "resolutions",
 };
 
+/** Map state type to the body field name used as the entity key (mirrors route.ts). */
+function getKeyField(type: StateType): string {
+  switch (type) {
+    case "corrections":
+    case "field-edits":
+      return "entityId";
+    case "sizes":
+    case "resolutions":
+      return "key";
+    case "merges":
+      return "canonicalId";
+    case "manual-map-overrides":
+      return "nodeId";
+    default:
+      return "entityId";
+  }
+}
+
+/** Map state type to the body field name containing the value object (mirrors route.ts). */
+function getValueField(type: StateType): string | null {
+  switch (type) {
+    case "corrections":
+      return "override";
+    case "field-edits":
+      return "edit";
+    case "sizes":
+      return "override";
+    case "merges":
+      return "merge";
+    case "manual-map-overrides":
+      return "override";
+    case "resolutions":
+      return null;
+    default:
+      return null;
+  }
+}
+
 async function fetchAllOrgState(company: string): Promise<OrgState> {
   const results = await Promise.all(
     STATE_TYPES.map(async (type) => {
@@ -104,15 +142,18 @@ async function deleteOrgState(
   }
 }
 
-function showToast(message: string) {
-  // Simple toast — 20-line custom implementation deferred to Phase 4.
-  // For now, console.warn so it's visible in devtools.
-  console.warn(`[Toast] ${message}`);
+function showToast(message: string, level: "warn" | "info" = "warn") {
+  if (level === "info") {
+    console.info(`[Toast] ${message}`);
+  } else {
+    console.warn(`[Toast] ${message}`);
+  }
 }
 
 export function useKVState(company: string) {
   const [state, setState] = useState<OrgState>(EMPTY_STATE);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const lastVersionRef = useRef<string>("");
   const isDraggingRef = useRef(false);
 
@@ -137,6 +178,7 @@ export function useKVState(company: string) {
       if (document.hidden || isDraggingRef.current) return;
       const version = await fetchSyncVersion(company);
       if (version && version !== lastVersionRef.current && lastVersionRef.current !== "") {
+        showToast("Data updated by another user — refreshing...", "info");
         const data = await fetchAllOrgState(company);
         setState(data);
       }
@@ -145,25 +187,47 @@ export function useKVState(company: string) {
     return () => clearInterval(interval);
   }, [company]);
 
-  // Apply-and-save mutation (no rollback)
+  // Apply-and-save mutation with optimistic updates for all state types
   const save = useCallback(
     async (type: StateType, body: Record<string, unknown>) => {
       // Optimistically update local state
       setState((prev) => {
         const key = TYPE_TO_KEY[type];
-        const next = { ...prev };
-        // For full-replacement types, set directly
-        if (type === "graduated-map" || type === "manual-map-modifications") {
-          const value = type === "graduated-map" ? body.map : body.modifications;
-          (next as Record<string, unknown>)[key] = value;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const next: any = { ...prev };
+
+        if (type === "graduated-map") {
+          next[key] = body.map;
+        } else if (type === "manual-map-modifications") {
+          next[key] = body.modifications;
+        } else {
+          // Key-value merge types: field-edits, sizes, merges, manual-map-overrides, corrections, resolutions
+          const keyFieldName = getKeyField(type);
+          const valueFieldName = getValueField(type);
+          const entityKey = body[keyFieldName] as string;
+          if (entityKey) {
+            const existing = { ...(next[key] || {}) };
+            if (valueFieldName && body[valueFieldName] != null) {
+              existing[entityKey] = body[valueFieldName];
+            } else {
+              // For resolutions: the body itself (minus the key field) is the value
+              const { [keyFieldName]: _, ...rest } = body;
+              existing[entityKey] = rest;
+            }
+            next[key] = existing;
+          }
         }
-        // For key-value types, we don't have enough info to merge locally
-        // without duplicating server logic — just keep current state.
-        // The sync poll will pick up the change within 10s.
-        return next;
+        return next as OrgState;
       });
+
       const ok = await postOrgState(company, type, body);
-      if (!ok) showToast("Save failed — change applied locally but not synced");
+      if (!ok) {
+        showToast("Save failed — change applied locally but not synced");
+      } else {
+        // Eagerly refetch to confirm server state
+        const confirmed = await fetchAllOrgState(company);
+        setState(confirmed);
+      }
     },
     [company]
   );
@@ -183,5 +247,16 @@ export function useKVState(company: string) {
     [company]
   );
 
-  return { state, loading, save, remove, isDraggingRef };
+  // Manual refresh — force full state reload from server
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const data = await fetchAllOrgState(company);
+      setState(data);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [company]);
+
+  return { state, loading, refreshing, save, remove, isDraggingRef, refresh };
 }

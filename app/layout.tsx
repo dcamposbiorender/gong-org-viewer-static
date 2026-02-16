@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Header from "@/components/Header";
+import { ToastProvider } from "@/components/Toast";
 
 export const metadata: Metadata = {
   title: "Org Chart Viewer",
@@ -14,9 +15,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-gray-50 text-gray-900 min-h-screen">
-        <Header />
-        <main>{children}</main>
+      <body className="bg-[#fefdfb] text-gray-900 min-h-screen font-serif">
+        <ToastProvider>
+          <Header />
+          <main>{children}</main>
+        </ToastProvider>
       </body>
     </html>
   );

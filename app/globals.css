@@ -1,1 +1,29 @@
 @import "tailwindcss";
+
+/* Toast slide-in animation */
+@keyframes slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.2s ease-out;
+}
+
+/* Drag-and-drop cursor overrides */
+[draggable="true"] {
+  cursor: grab;
+}
+[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Snippet context highlight pulse */
+@keyframes highlight-pulse {
+  0% { background: #fef3c7; }
+  100% { background: transparent; }
+}
+
+.snippet-highlight-pulse {
+  animation: highlight-pulse 3s ease-out;
+}

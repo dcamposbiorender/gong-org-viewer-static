@@ -2,9 +2,19 @@
 
 import { useParams } from "next/navigation";
 import { notFound } from "next/navigation";
-import { useState, useEffect } from "react";
-import { VALID_ACCOUNTS, type MatchReviewCompany, type ValidAccount } from "@/lib/types";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import {
+  VALID_ACCOUNTS,
+  type CompanyData,
+  type ValidAccount,
+  type MatchReviewCompany,
+} from "@/lib/types";
 import { useKVState } from "@/lib/use-kv-state";
+import { useMatchReview } from "@/lib/use-match-review";
+import { buildEntityList, type EntityListItem } from "@/lib/match-helpers";
+import { buildWorkingTree } from "@/lib/build-working-tree";
+import MatchReviewTable from "@/components/MatchReviewTable";
+import EntityPickerModal from "@/components/EntityPickerModal";
 
 export default function MatchReviewPage() {
   const params = useParams<{ company: string }>();
@@ -14,54 +24,92 @@ export default function MatchReviewPage() {
     notFound();
   }
 
-  const { loading: kvLoading } = useKVState(company);
+  const { state, loading: kvLoading } = useKVState(company);
+  const { decisions, loading: mrLoading, approve, reject, manualMatch, reset } =
+    useMatchReview(company);
   const [reviewData, setReviewData] = useState<MatchReviewCompany | null>(null);
+  const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
+  const [pickerItemId, setPickerItemId] = useState<string | null>(null);
 
-  // Load bundled match-review JSON for this company
+  // Load bundled JSON data
   useEffect(() => {
     let cancelled = false;
     setDataLoading(true);
-    fetch(`/data/${company}/match-review.json`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled) {
-          setReviewData(data);
-          setDataLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setDataLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    Promise.all([
+      fetch(`/data/${company}/match-review.json`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/data/${company}/manual.json`).then((r) => (r.ok ? r.json() : null)),
+    ]).then(([review, manual]) => {
+      if (!cancelled) {
+        setReviewData(review);
+        setCompanyData(manual);
+        setDataLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) setDataLoading(false);
+    });
+    return () => { cancelled = true; };
   }, [company]);
 
-  const loading = kvLoading || dataLoading;
+  const loading = kvLoading || dataLoading || mrLoading;
+
+  // Build entity list for picker modal
+  const entityList = useMemo<EntityListItem[]>(() => {
+    if (!companyData) return [];
+    const workingTree = buildWorkingTree(
+      companyData.root,
+      state.manualMapOverrides,
+      state.manualMapModifications,
+      state.merges,
+      state.fieldEdits
+    );
+    return buildEntityList(workingTree, state.fieldEdits);
+  }, [companyData, state]);
+
+  const reviewItems = useMemo(() => reviewData?.items || [], [reviewData]);
+
+  // Callbacks
+  const handleApprove = useCallback(
+    (itemId: string, manualNode: string, manualPath: string, manualNodeId: string) => {
+      approve(itemId, manualNode, manualPath, manualNodeId);
+    },
+    [approve]
+  );
+
+  const handleReject = useCallback(
+    (itemId: string) => {
+      reject(itemId);
+    },
+    [reject]
+  );
+
+  const handlePickEntity = useCallback((itemId: string) => {
+    setPickerItemId(itemId);
+  }, []);
+
+  const handleReset = useCallback(
+    (itemId: string) => {
+      reset(itemId);
+    },
+    [reset]
+  );
+
+  const handleEntitySelected = useCallback(
+    (entity: EntityListItem) => {
+      if (!pickerItemId) return;
+      manualMatch(pickerItemId, entity.name, entity.path, entity.id);
+      setPickerItemId(null);
+    },
+    [pickerItemId, manualMatch]
+  );
 
   if (loading) {
     return (
       <div className="max-w-screen-xl mx-auto p-4">
         <div className="flex items-center gap-2 text-gray-500">
-          <svg
-            className="animate-spin h-5 w-5"
-            viewBox="0 0 24 24"
-            fill="none"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            />
+          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
           Loading match review for {company}...
         </div>
@@ -79,10 +127,10 @@ export default function MatchReviewPage() {
 
   return (
     <div className="max-w-screen-xl mx-auto p-4">
-      {/* Stats bar */}
+      {/* Header */}
       <div className="flex items-center gap-6 mb-4 text-sm text-gray-600">
         <h2 className="text-xl font-semibold text-gray-900">
-          Match Review — {company.charAt(0).toUpperCase() + company.slice(1)}
+          Match Review &mdash; {company.charAt(0).toUpperCase() + company.slice(1)}
         </h2>
         <span>
           <strong>{reviewData.total_unmatched}</strong> unmatched
@@ -93,18 +141,27 @@ export default function MatchReviewPage() {
           </span>
         )}
         <span>
-          <strong>{reviewData.items.length}</strong> items
+          <strong>{reviewItems.length}</strong> items
         </span>
       </div>
 
-      {/* Placeholder for Phase 3 match review table */}
-      <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-400">
-        Match review table will be implemented in Phase 3.
-        <br />
-        <span className="text-xs">
-          {reviewData.items.length} items to review
-        </span>
-      </div>
+      {/* Match Review Table */}
+      <MatchReviewTable
+        items={reviewItems}
+        decisions={decisions}
+        onApprove={handleApprove}
+        onReject={handleReject}
+        onPickEntity={handlePickEntity}
+        onReset={handleReset}
+      />
+
+      {/* Entity Picker Modal */}
+      <EntityPickerModal
+        isOpen={pickerItemId !== null}
+        entities={entityList}
+        onSelect={handleEntitySelected}
+        onClose={() => setPickerItemId(null)}
+      />
     </div>
   );
 }
