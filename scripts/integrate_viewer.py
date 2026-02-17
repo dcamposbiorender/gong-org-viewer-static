@@ -68,6 +68,28 @@ def load_transcripts(company: str) -> dict:
     return transcripts
 
 
+def _extract_context(text: str, idx: int, match_len: int,
+                     title: str, context_chars: int = 1000) -> dict:
+    """Extract context windows around a match position in text."""
+    start = max(0, idx - context_chars)
+    end = min(len(text), idx + match_len + context_chars)
+
+    before = text[start:idx]
+    after = text[idx + match_len:end]
+
+    if start > 0:
+        before = '...' + before
+    if end < len(text):
+        after = after + '...'
+
+    return {
+        'contextBefore': before,
+        'contextAfter': after,
+        'callTitle': title,
+        'exactQuote': text[idx:idx + match_len],
+    }
+
+
 def find_context(quote: str, transcript_data: dict, context_chars: int = 1000) -> dict | None:
     """Find snippet quote in transcript and extract surrounding context.
     Uses full normalized quote match (up to 1000 chars), not prefix.
@@ -77,6 +99,7 @@ def find_context(quote: str, transcript_data: dict, context_chars: int = 1000) -
     if not text or not quote:
         return None
 
+    title = transcript_data.get('title', '')
     norm_text = re.sub(r'\s+', ' ', text.lower())
     norm_quote = re.sub(r'\s+', ' ', quote.lower().strip())
 
@@ -86,39 +109,135 @@ def find_context(quote: str, transcript_data: dict, context_chars: int = 1000) -
 
     # Fallback: strip speaker tags (and trailing colon) from transcript and retry
     # LLM extraction often removes "[Speaker 123456]: " from quotes
-    use_stripped = False
     if idx < 0:
         stripped_text = re.sub(r'\[Speaker \d+\]:\s*', '', text)
         stripped_text = re.sub(r'\[Speaker \d+\]', '', stripped_text)
         norm_stripped = re.sub(r'\s+', ' ', stripped_text.lower())
         idx = norm_stripped.find(search_key)
         if idx >= 0:
-            use_stripped = True
             text = stripped_text
             norm_text = norm_stripped
 
-    if idx < 0:
+    if idx >= 0:
+        return _extract_context(text, idx, len(search_key), title, context_chars)
+
+    return None
+
+
+def find_context_with_fallbacks(quote: str, transcript_data: dict,
+                                entity_name: str = None,
+                                context_chars: int = 1000,
+                                quote_chars: int = 200) -> dict | None:
+    """Enhanced context finder with progressive fallbacks.
+
+    Tries in order:
+    1. Standard find_context (full quote match + speaker-tag-stripped)
+    2. Shorter prefix matches (100, 50, 30 chars) on speaker-stripped text
+    3. Quote with ellipsis/punctuation stripped
+    4. Entity name search in transcript (extracts exact surrounding text)
+    5. Fuzzy entity name variants (R&D -> "r and d", etc.)
+
+    Returns dict with contextBefore, contextAfter, callTitle, exactQuote.
+    exactQuote is the actual transcript text that was matched.
+    """
+    text = transcript_data.get('text') or ''
+    if not text:
         return None
 
-    # Extract context windows from original text
-    start = max(0, idx - context_chars)
-    end = min(len(text), idx + len(search_key) + context_chars)
+    # 1. Standard match
+    result = find_context(quote, transcript_data, context_chars)
+    if result:
+        return result
 
-    # Keep original speaker IDs — resolved to names at display time in JS
-    before = text[start:idx]
-    after = text[idx + len(search_key):end]
+    title = transcript_data.get('title', '')
+    stripped_text = re.sub(r'\[Speaker \d+\]:\s*', '', text)
+    stripped_text = re.sub(r'\[Speaker \d+\]', '', stripped_text)
+    norm_stripped = re.sub(r'\s+', ' ', stripped_text.lower())
 
-    # Add ellipsis if truncated
-    if start > 0:
-        before = '...' + before
-    if end < len(text):
-        after = after + '...'
+    norm_quote = re.sub(r'\s+', ' ', quote.lower().strip())
 
-    return {
-        'contextBefore': before,
-        'contextAfter': after,
-        'callTitle': transcript_data.get('title', '')
-    }
+    # 2. Shorter prefix matches
+    for prefix_len in [100, 50, 30]:
+        if len(norm_quote) >= prefix_len:
+            prefix = norm_quote[:prefix_len]
+            idx = norm_stripped.find(prefix)
+            if idx >= 0:
+                # Found prefix — extract quote_chars of exact text from this point
+                end_idx = min(len(stripped_text), idx + quote_chars)
+                return _extract_context(stripped_text, idx, end_idx - idx, title, context_chars)
+
+    # 3. Strip ellipsis and special punctuation from quote, retry
+    cleaned_quote = re.sub(r'\.{2,}|…', ' ', norm_quote)
+    cleaned_quote = re.sub(r'\s+', ' ', cleaned_quote).strip()
+    for prefix_len in [50, 30]:
+        if len(cleaned_quote) >= prefix_len:
+            prefix = cleaned_quote[:prefix_len]
+            idx = norm_stripped.find(prefix)
+            if idx >= 0:
+                end_idx = min(len(stripped_text), idx + quote_chars)
+                return _extract_context(stripped_text, idx, end_idx - idx, title, context_chars)
+
+    # 4. Entity name search
+    if entity_name:
+        entity_lower = entity_name.lower().strip()
+        idx = norm_stripped.find(entity_lower)
+        if idx >= 0:
+            # Center the quote around the entity mention
+            q_start = max(0, idx - quote_chars // 4)
+            q_end = min(len(stripped_text), idx + len(entity_lower) + quote_chars)
+            return _extract_context(stripped_text, q_start, q_end - q_start, title, context_chars)
+
+        # 5. Fuzzy entity name variants
+        variants = set()
+        # R&D -> "r and d", "rd"
+        variants.add(entity_lower.replace('&', ' and ').replace('  ', ' '))
+        variants.add(entity_lower.replace('&', ''))
+        variants.add(re.sub(r'\s+', ' ', entity_lower.replace('&', ' ')).strip())
+        # "Communications" entity but transcript says "comms"
+        # Try first word if multi-word
+        words = entity_lower.split()
+        if len(words) > 1:
+            variants.add(words[0])
+        # Remove "group", "team", "department", "unit" suffix
+        for suffix in [' group', ' team', ' department', ' unit', ' site']:
+            if entity_lower.endswith(suffix):
+                variants.add(entity_lower[:-len(suffix)].strip())
+
+        variants.discard(entity_lower)  # Already tried
+        for variant in variants:
+            if len(variant) < 2:
+                continue
+            idx = norm_stripped.find(variant)
+            if idx >= 0:
+                q_start = max(0, idx - quote_chars // 4)
+                q_end = min(len(stripped_text), idx + len(variant) + quote_chars)
+                return _extract_context(stripped_text, q_start, q_end - q_start, title, context_chars)
+
+    # 6. Last resort: search for distinctive multi-word phrases from the quote
+    # (skip common words, look for 3-5 word sequences)
+    stop_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
+                  'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+                  'could', 'should', 'may', 'might', 'can', 'shall', 'to', 'of',
+                  'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into',
+                  'through', 'during', 'before', 'after', 'and', 'but', 'or',
+                  'so', 'if', 'then', 'that', 'this', 'it', 'i', 'we', 'you',
+                  'they', 'he', 'she', 'my', 'your', 'our', 'their', 'me',
+                  'him', 'her', 'us', 'them', 'some', 'other', 'actually'}
+    if quote:
+        words = re.sub(r'[^\w\s]', '', norm_quote).split()
+        # Try 4-word then 3-word windows of non-stop words
+        for window_size in [4, 3]:
+            for i in range(len(words) - window_size + 1):
+                window = words[i:i + window_size]
+                if any(w not in stop_words and len(w) > 2 for w in window):
+                    phrase = ' '.join(window)
+                    idx = norm_stripped.find(phrase)
+                    if idx >= 0:
+                        q_start = max(0, idx - quote_chars // 4)
+                        q_end = min(len(stripped_text), idx + len(phrase) + quote_chars)
+                        return _extract_context(stripped_text, q_start, q_end - q_start, title, context_chars)
+
+    return None
 
 
 def load_enriched_auto_map(company: str) -> Dict:
@@ -168,13 +287,15 @@ def build_manual_map_names(manual_root: Dict) -> set:
     return names
 
 
-def generate_match_review_from_auto_map(company: str, auto_map: Dict, manual_map: Dict) -> Dict:
+def generate_match_review_from_auto_map(company: str, auto_map: Dict, manual_map: Dict,
+                                        transcripts: dict = None) -> Dict:
     """Generate match review data from true auto map.
 
     Finds entities in auto map that DON'T match any manual map node.
     These are the "unmatched" entities that need user review.
 
     Loads LLM match suggestions to provide suggested matches.
+    If transcripts provided, enriches each snippet with contextBefore/contextAfter.
     """
     if not auto_map or not auto_map.get("root"):
         return {}
@@ -246,6 +367,35 @@ def generate_match_review_from_auto_map(company: str, auto_map: Dict, manual_map
             collect_unmatched(child, name)
 
     collect_unmatched(auto_map["root"])
+
+    # Enrich all_snippets with transcript context
+    ctx_matched = 0
+    ctx_total = 0
+    ctx_replaced = 0
+    if transcripts:
+        for item in unmatched_items:
+            entity_name = item.get("gong_entity", "")
+            for snippet in item.get("all_snippets", []):
+                call_id = snippet.get("callId")
+                if call_id and call_id in transcripts:
+                    ctx_total += 1
+                    # Try standard match first, then fallbacks
+                    context = find_context(snippet.get("quote", ""), transcripts[call_id])
+                    if not context:
+                        context = find_context_with_fallbacks(
+                            snippet.get("quote", ""), transcripts[call_id],
+                            entity_name=entity_name
+                        )
+                        if context and context.get("exactQuote"):
+                            # Replace paraphrased quote with exact transcript text
+                            snippet["quote"] = context["exactQuote"].strip()
+                            ctx_replaced += 1
+                    if context:
+                        snippet["contextBefore"] = context["contextBefore"]
+                        snippet["contextAfter"] = context["contextAfter"]
+                        snippet["callTitle"] = context["callTitle"]
+                        ctx_matched += 1
+        print(f"    Match-review context: {ctx_matched}/{ctx_total} snippets enriched ({ctx_replaced} quotes replaced with exact text)")
 
     # Count items with suggestions
     with_suggestions = sum(1 for item in unmatched_items if item.get("llm_suggested_match"))
@@ -481,6 +631,14 @@ def convert_node_for_viewer(node: Dict, leader_lookup: Dict = None,
             if call_id and call_id in transcripts:
                 context_stats['total'] += 1
                 context = find_context(viewer_snippet['quote'], transcripts[call_id])
+                if not context:
+                    entity_name = node.get("name", "")
+                    context = find_context_with_fallbacks(
+                        viewer_snippet['quote'], transcripts[call_id],
+                        entity_name=entity_name
+                    )
+                    if context and context.get("exactQuote"):
+                        viewer_snippet['quote'] = context['exactQuote'].strip()
                 if context:
                     viewer_snippet['contextBefore'] = context['contextBefore']
                     viewer_snippet['contextAfter'] = context['contextAfter']
@@ -788,7 +946,7 @@ def generate_viewer_data() -> tuple:
 
         # Generate match review from auto map (finds unmatched entities)
         if enriched_map and manual_map:
-            match_review_data = generate_match_review_from_auto_map(company, enriched_map, manual_map)
+            match_review_data = generate_match_review_from_auto_map(company, enriched_map, manual_map, transcripts)
             if match_review_data:
                 match_review["companies"][company] = match_review_data
                 print(f"    MATCH_REVIEW: {match_review_data['total_unmatched']} unmatched items")

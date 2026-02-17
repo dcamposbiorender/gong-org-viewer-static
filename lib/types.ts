@@ -204,6 +204,7 @@ export interface MatchReviewItem {
   gong_url?: string;
   mention_count?: number;
   status: string;
+  all_snippets?: Snippet[];
 }
 
 export interface MatchReviewCompany {

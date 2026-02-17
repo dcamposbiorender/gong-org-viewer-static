@@ -7,6 +7,14 @@ import { getDisplaySize } from "@/lib/tree-ops";
 import { findNodeParent } from "@/lib/tree-ops";
 import { sanitizeUrl } from "@/lib/utils";
 
+function decodeEntities(text: string): string {
+  if (typeof window === "undefined") return text;
+  if (!text || !text.includes("&")) return text;
+  const el = document.createElement("textarea");
+  el.innerHTML = text;
+  return el.value;
+}
+
 interface Props {
   node: WorkingTreeNode | null;
   company: string;
@@ -65,10 +73,18 @@ export default function EvidencePanel({
 
   approvedMatches.forEach((match) => {
     if (match.snippet) {
+      const firstSnippet = match.all_snippets?.[0];
       snippets.push({
         date: match.call_date || "",
-        quote: match.snippet,
+        quote: firstSnippet?.quote || match.snippet,
+        gongUrl: match.gong_url,
+        customerName: firstSnippet?.customerName || match.speaker_name,
+        internalName: firstSnippet?.internalName,
         entityName: match.gong_entity + " (approved match)",
+        contextBefore: firstSnippet?.contextBefore,
+        contextAfter: firstSnippet?.contextAfter,
+        callTitle: firstSnippet?.callTitle,
+        callId: firstSnippet?.callId || match.call_id,
       });
     }
   });
@@ -226,34 +242,33 @@ export default function EvidencePanel({
         ) : (
           <div className="flex gap-3">
             {snippets.map((s, idx) => (
-              <div key={idx} className="min-w-[280px] max-w-[320px] shrink-0 bg-white rounded p-3 border border-[#e5e5e5]">
+              <div key={idx} className="min-w-[280px] max-w-[320px] shrink-0 bg-white rounded p-3 border border-[#e5e5e5] overflow-hidden">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-gray-500">
-                    {s.gongUrl ? (
+                  <span className="text-xs text-gray-500">{s.date || ""}</span>
+                  <div className="flex items-center gap-2">
+                    {s.contextBefore !== undefined && (
+                      <button
+                        onClick={() => onContextClick(s)}
+                        className="text-[11px] text-gray-600 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-50"
+                        title="View context"
+                      >
+                        Context
+                      </button>
+                    )}
+                    {s.gongUrl && (
                       <a
                         href={sanitizeUrl(s.gongUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
+                        className="text-xs font-semibold text-gray-700 hover:text-gray-900 hover:underline"
                       >
-                        {s.date || ""} &rarr; Gong
+                        Gong ↗
                       </a>
-                    ) : (
-                      s.date || ""
                     )}
-                  </span>
-                  {s.contextBefore !== undefined && (
-                    <button
-                      onClick={() => onContextClick(s)}
-                      className="text-[11px] text-[#4b5563] border border-[#d1d5db] rounded px-2 py-0.5 hover:bg-[#f5f5f5]"
-                      title="View context"
-                    >
-                      &#128196; Context
-                    </button>
-                  )}
+                  </div>
                 </div>
-                <div className="text-[13px] italic text-[#333] leading-[1.4]">&ldquo;{s.quote}&rdquo;</div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-[13px] italic text-[#333] leading-[1.4] break-words">&ldquo;{decodeEntities(s.quote)}&rdquo;</div>
+                <div className="text-xs text-gray-500 mt-1 break-words">
                   {s.internalName && `Internal: ${s.internalName}`}
                   {s.internalName && s.customerName && " | "}
                   {s.customerName && `Customer: ${s.customerName}`}

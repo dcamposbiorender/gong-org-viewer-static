@@ -69,6 +69,8 @@ batches_enriched/ → extract → extractions/ → consolidate → output/ → b
 
 **New**: `--json` flag outputs per-company JSON to `public/data/{company}/`. Old `--update` flag still works for legacy JS format.
 
+**Context extraction**: `integrate_viewer.py` enriches every snippet with `contextBefore`/`contextAfter` (1000-char windows from raw transcripts in `batches_enriched/`). Uses `find_context_with_fallbacks()` with 6 progressive strategies for 100% coverage. Paraphrased LLM quotes are replaced with exact transcript text when a fallback match is used.
+
 ---
 
 ## Critical Field Mappings (Why Things Break)
@@ -104,7 +106,10 @@ batches_enriched/ → extract → extractions/ → consolidate → output/ → b
 {
   generated: "ISO timestamp",
   total_unmatched: N,
-  items: [{ id, gong_entity, snippet, llm_suggested_match, ... }]
+  items: [{
+    id, gong_entity, snippet, llm_suggested_match, gong_url, call_id, speaker_name,
+    all_snippets: [{ quote, date, callId, gongUrl, contextBefore, contextAfter, callTitle, ... }]
+  }]
 }
 ```
 
