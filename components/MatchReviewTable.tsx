@@ -13,6 +13,7 @@ interface Props {
   onReject: (itemId: string) => void;
   onPickEntity: (itemId: string) => void;
   onReset: (itemId: string) => void;
+  onContextClick?: (item: MatchReviewItem) => void;
 }
 
 export default function MatchReviewTable({
@@ -22,6 +23,7 @@ export default function MatchReviewTable({
   onReject,
   onPickEntity,
   onReset,
+  onContextClick,
 }: Props) {
   const [searchFilter, setSearchFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -176,6 +178,14 @@ export default function MatchReviewTable({
                       </div>
                       {item.call_date && (
                         <div className="text-xs text-gray-400">{item.call_date}</div>
+                      )}
+                      {onContextClick && item.all_snippets?.[0]?.contextBefore && (
+                        <button
+                          onClick={() => onContextClick(item)}
+                          className="mt-1 px-1.5 py-0.5 text-[10px] text-blue-600 border border-blue-300 rounded hover:bg-blue-50"
+                        >
+                          Context
+                        </button>
                       )}
                     </td>
                     <td className="py-2 pr-3">

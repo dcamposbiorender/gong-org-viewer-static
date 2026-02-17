@@ -8,6 +8,8 @@ import {
   type CompanyData,
   type ValidAccount,
   type MatchReviewCompany,
+  type Snippet,
+  type MatchReviewItem,
 } from "@/lib/types";
 import { useKVState } from "@/lib/use-kv-state";
 import { useMatchReview } from "@/lib/use-match-review";
@@ -15,6 +17,7 @@ import { buildEntityList, type EntityListItem } from "@/lib/match-helpers";
 import { buildWorkingTree } from "@/lib/build-working-tree";
 import MatchReviewTable from "@/components/MatchReviewTable";
 import EntityPickerModal from "@/components/EntityPickerModal";
+import SnippetContextModal from "@/components/SnippetContextModal";
 import { setRefreshHandler } from "@/lib/refresh-store";
 import { useToast } from "@/components/Toast";
 
@@ -34,6 +37,7 @@ export default function MatchReviewPage() {
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [pickerItemId, setPickerItemId] = useState<string | null>(null);
+  const [contextSnippet, setContextSnippet] = useState<Snippet | null>(null);
 
   // Load bundled JSON data
   useEffect(() => {
@@ -114,6 +118,12 @@ export default function MatchReviewPage() {
     [reset]
   );
 
+  const handleContextClick = useCallback((item: MatchReviewItem) => {
+    const s = item.all_snippets?.[0];
+    if (!s) return;
+    setContextSnippet(s);
+  }, []);
+
   const handleEntitySelected = useCallback(
     (entity: EntityListItem) => {
       if (!pickerItemId) return;
@@ -169,6 +179,7 @@ export default function MatchReviewPage() {
         onReject={handleReject}
         onPickEntity={handlePickEntity}
         onReset={handleReset}
+        onContextClick={handleContextClick}
       />
 
       {/* Entity Picker Modal */}
@@ -177,6 +188,12 @@ export default function MatchReviewPage() {
         entities={entityList}
         onSelect={handleEntitySelected}
         onClose={() => setPickerItemId(null)}
+      />
+
+      {/* Snippet Context Modal */}
+      <SnippetContextModal
+        snippet={contextSnippet}
+        onClose={() => setContextSnippet(null)}
       />
     </>
   );
