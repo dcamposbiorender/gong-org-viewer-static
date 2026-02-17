@@ -26,6 +26,8 @@ import TableView from "@/components/TableView";
 import EvidencePanel from "@/components/EvidencePanel";
 import SnippetContextModal from "@/components/SnippetContextModal";
 import ManageEntitiesModal from "@/components/ManageEntitiesModal";
+import { setRefreshHandler } from "@/lib/refresh-store";
+import { useToast } from "@/components/Toast";
 
 export default function ManualMapPage() {
   const params = useParams<{ company: string }>();
@@ -36,6 +38,7 @@ export default function ManualMapPage() {
   }
 
   const { state, loading: kvLoading, refreshing, save, isDraggingRef, refresh } = useKVState(company);
+  const { showToast } = useToast();
   const { decisions, loading: mrLoading } = useMatchReview(company);
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [reviewData, setReviewData] = useState<MatchReviewCompany | null>(null);
@@ -46,7 +49,6 @@ export default function ManualMapPage() {
   const [manageEntitiesOpen, setManageEntitiesOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"tree" | "table">("tree");
   const [evidenceExpanded, setEvidenceExpanded] = useState(false);
-  const [refreshToast, setRefreshToast] = useState(false);
 
   // Load bundled JSON data
   useEffect(() => {
@@ -190,10 +192,16 @@ export default function ManualMapPage() {
   );
 
   const handleRefresh = useCallback(async () => {
-    await refresh();
-    setRefreshToast(true);
-    setTimeout(() => setRefreshToast(false), 2000);
-  }, [refresh]);
+    // Re-fetch both JSON data files AND KV state
+    const [manual, review] = await Promise.all([
+      fetch(`/data/${company}/manual.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/data/${company}/match-review.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      refresh(),
+    ]);
+    if (manual) setCompanyData(manual);
+    if (review) setReviewData(review);
+    showToast("Data refreshed", "success");
+  }, [company, refresh, showToast]);
 
   const handleContextClick = useCallback((snippet: Snippet) => {
     setContextSnippet(snippet);
@@ -218,7 +226,7 @@ export default function ManualMapPage() {
   );
 
   const handleDeleteEntity = useCallback(
-    (nodeId: string) => {
+    async (nodeId: string) => {
       if (!workingTree) return;
       const node = findNodeById(workingTree, nodeId) as WorkingTreeNode | null;
       if (!node) return;
@@ -236,7 +244,7 @@ export default function ManualMapPage() {
         added: [...added],
         deleted: [...deleted, { id: nodeId, deletedAt: new Date().toISOString() }],
       };
-      save("manual-map-modifications", { modifications: updatedMods });
+      await save("manual-map-modifications", { modifications: updatedMods });
       setSelectedNodeId(null);
     },
     [workingTree, state.manualMapModifications, save]
@@ -258,36 +266,39 @@ export default function ManualMapPage() {
   );
 
   const handleMerge = useCallback(
-    (canonicalId: string, absorbedId: string) => {
+    async (canonicalId: string, absorbedId: string) => {
       const existingMerge = state.merges[canonicalId];
       const absorbed = [...(existingMerge?.absorbed || []), absorbedId];
-      save("merges", {
+      await save("merges", {
         canonicalId,
         merge: { absorbed, mergedAt: new Date().toISOString() },
       });
+      showToast("Merge saved", "success");
     },
-    [state.merges, save]
+    [state.merges, save, showToast]
   );
+
+  // Sync refresh handler to external store (read by Header across layout boundary)
+  useEffect(() => {
+    setRefreshHandler(handleRefresh, refreshing);
+    return () => setRefreshHandler(null, false);
+  }, [handleRefresh, refreshing]);
 
   if (loading) {
     return (
-      <div className="max-w-screen-xl mx-auto p-4">
-        <div className="flex items-center gap-2 text-gray-500">
-          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          Loading {company}...
-        </div>
+      <div className="flex items-center gap-2 text-gray-500">
+        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        Loading {company}...
       </div>
     );
   }
 
   if (!companyData || !workingTree) {
     return (
-      <div className="max-w-screen-xl mx-auto p-4">
-        <p className="text-gray-500">No manual map data available for {company}.</p>
-      </div>
+      <p className="text-gray-500">No manual map data available for {company}.</p>
     );
   }
 
@@ -295,7 +306,7 @@ export default function ManualMapPage() {
   const matchRate = stats.entities > 0 ? Math.round((stats.matched / stats.entities) * 100) : 0;
 
   return (
-    <div className="max-w-screen-xl mx-auto p-4">
+    <>
       {/* Stats bar */}
       <div className="flex items-center gap-4 mb-4 text-sm bg-[#f8f7f5] rounded px-3 py-2">
         <h2 className="text-xl font-semibold text-gray-900">{companyData.company}</h2>
@@ -332,24 +343,6 @@ export default function ManualMapPage() {
           className="ml-auto px-3 py-1.5 text-xs bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
         >
           Manage Entities
-        </button>
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 disabled:opacity-50"
-          title="Refresh all data"
-        >
-          {refreshing ? (
-            <span className="flex items-center gap-1">
-              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Refreshing…
-            </span>
-          ) : (
-            <>&#8635; Refresh</>
-          )}
         </button>
       </div>
 
@@ -440,12 +433,6 @@ export default function ManualMapPage() {
         onMerge={handleMerge}
       />
 
-      {/* Refresh toast */}
-      {refreshToast && (
-        <div className="fixed bottom-4 right-4 bg-[#1a1a1a] text-white px-4 py-2 rounded shadow-lg text-sm animate-slide-in z-50">
-          &#10003; Data refreshed
-        </div>
-      )}
-    </div>
+    </>
   );
 }

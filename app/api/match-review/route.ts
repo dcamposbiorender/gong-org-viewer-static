@@ -88,8 +88,7 @@ export async function POST(req: NextRequest) {
     // Add to target category
     data[category][itemId] = decision;
 
-    await kv.set(kvKey, data);
-    await bumpSyncVersion(account);
+    await Promise.all([kv.set(kvKey, data), bumpSyncVersion(account)]);
     return NextResponse.json({ success: true, category, itemId });
   } catch (error) {
     console.error("[match-review] KV error:", error);
@@ -114,8 +113,7 @@ export async function DELETE(req: NextRequest) {
     delete data.approved[itemId];
     delete data.rejected[itemId];
     delete data.manual[itemId];
-    await kv.set(kvKey, data);
-    await bumpSyncVersion(account);
+    await Promise.all([kv.set(kvKey, data), bumpSyncVersion(account)]);
     return NextResponse.json({ success: true, itemId });
   } catch (error) {
     console.error("[match-review] KV error:", error);

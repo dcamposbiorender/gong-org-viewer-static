@@ -100,8 +100,7 @@ export async function POST(req: NextRequest) {
     if (type === "graduated-map") {
       const { map } = body as { map: unknown };
       if (!map) return NextResponse.json({ error: "map required" }, { status: 400 });
-      await kv.set(kvKey, map);
-      await bumpSyncVersion(account);
+      await Promise.all([kv.set(kvKey, map), bumpSyncVersion(account)]);
       return NextResponse.json({ success: true });
     }
 
@@ -111,8 +110,7 @@ export async function POST(req: NextRequest) {
       if (!modifications) {
         return NextResponse.json({ error: "modifications required" }, { status: 400 });
       }
-      await kv.set(kvKey, modifications);
-      await bumpSyncVersion(account);
+      await Promise.all([kv.set(kvKey, modifications), bumpSyncVersion(account)]);
       return NextResponse.json({ success: true });
     }
 
@@ -138,8 +136,7 @@ export async function POST(req: NextRequest) {
       existing[entityKey] = { ...rest, savedAt: new Date().toISOString() };
     }
 
-    await kv.set(kvKey, existing);
-    await bumpSyncVersion(account);
+    await Promise.all([kv.set(kvKey, existing), bumpSyncVersion(account)]);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error(`[org-state:${type}] KV error:`, error);
@@ -162,8 +159,7 @@ export async function DELETE(req: NextRequest) {
 
     const existing = (await kv.get<Record<string, unknown>>(kvKey)) || {};
     delete existing[entityKey];
-    await kv.set(kvKey, existing);
-    await bumpSyncVersion(account);
+    await Promise.all([kv.set(kvKey, existing), bumpSyncVersion(account)]);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error(`[org-state:${type}] KV error:`, error);

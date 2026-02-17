@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { VALID_ACCOUNTS } from "@/lib/types";
+import { useRefreshStore } from "@/lib/refresh-store";
 
 function parseRoute(pathname: string): { company: string; mode: string } {
   // e.g. /manual/astrazeneca → { mode: "manual", company: "astrazeneca" }
@@ -18,6 +19,7 @@ export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const { company, mode } = parseRoute(pathname);
+  const { onRefresh, refreshing } = useRefreshStore();
 
   function handleCompanyChange(e: React.ChangeEvent<HTMLSelectElement>) {
     router.push(`/${mode}/${e.target.value}`);
@@ -25,7 +27,7 @@ export default function Header() {
 
   return (
     <header className="bg-white border-b border-[#ddd] px-4 py-3">
-      <div className="flex items-center justify-between max-w-screen-xl mx-auto">
+      <div className="flex items-center justify-between max-w-[1600px] mx-auto">
         {/* Left: title + company selector */}
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-semibold text-gray-900">
@@ -42,6 +44,26 @@ export default function Header() {
               </option>
             ))}
           </select>
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={refreshing}
+              className="ml-1 px-2 py-1 text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded disabled:opacity-50 transition-colors flex items-center gap-1"
+              title="Refresh all data"
+            >
+              {refreshing ? (
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <>
+                  <span className="text-lg leading-none">&#8635;</span>
+                  <span className="text-xs font-medium uppercase tracking-wide">Refresh</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Right: mode tabs */}

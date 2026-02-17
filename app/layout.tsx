@@ -18,7 +18,7 @@ export default function RootLayout({
       <body className="bg-[#fefdfb] text-gray-900 min-h-screen font-serif">
         <ToastProvider>
           <Header />
-          <main>{children}</main>
+          <main className="max-w-[1600px] mx-auto px-2 py-4">{children}</main>
         </ToastProvider>
       </body>
     </html>

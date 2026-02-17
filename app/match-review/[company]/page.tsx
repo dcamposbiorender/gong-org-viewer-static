@@ -15,6 +15,8 @@ import { buildEntityList, type EntityListItem } from "@/lib/match-helpers";
 import { buildWorkingTree } from "@/lib/build-working-tree";
 import MatchReviewTable from "@/components/MatchReviewTable";
 import EntityPickerModal from "@/components/EntityPickerModal";
+import { setRefreshHandler } from "@/lib/refresh-store";
+import { useToast } from "@/components/Toast";
 
 export default function MatchReviewPage() {
   const params = useParams<{ company: string }>();
@@ -24,7 +26,8 @@ export default function MatchReviewPage() {
     notFound();
   }
 
-  const { state, loading: kvLoading } = useKVState(company);
+  const { state, loading: kvLoading, refreshing, refresh } = useKVState(company);
+  const { showToast } = useToast();
   const { decisions, loading: mrLoading, approve, reject, manualMatch, reset } =
     useMatchReview(company);
   const [reviewData, setReviewData] = useState<MatchReviewCompany | null>(null);
@@ -53,6 +56,23 @@ export default function MatchReviewPage() {
 
   const loading = kvLoading || dataLoading || mrLoading;
 
+  const handleRefresh = useCallback(async () => {
+    const [review, manual] = await Promise.all([
+      fetch(`/data/${company}/match-review.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/data/${company}/manual.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      refresh(),
+    ]);
+    if (review) setReviewData(review);
+    if (manual) setCompanyData(manual);
+    showToast("Data refreshed", "success");
+  }, [company, refresh, showToast]);
+
+  // Sync refresh handler to external store (read by Header across layout boundary)
+  useEffect(() => {
+    setRefreshHandler(handleRefresh, refreshing);
+    return () => setRefreshHandler(null, false);
+  }, [handleRefresh, refreshing]);
+
   // Build entity list for picker modal
   const entityList = useMemo<EntityListItem[]>(() => {
     if (!companyData) return [];
@@ -64,7 +84,7 @@ export default function MatchReviewPage() {
       state.fieldEdits
     );
     return buildEntityList(workingTree, state.fieldEdits);
-  }, [companyData, state]);
+  }, [companyData, state.manualMapOverrides, state.manualMapModifications, state.merges, state.fieldEdits]);
 
   const reviewItems = useMemo(() => reviewData?.items || [], [reviewData]);
 
@@ -105,28 +125,24 @@ export default function MatchReviewPage() {
 
   if (loading) {
     return (
-      <div className="max-w-screen-xl mx-auto p-4">
-        <div className="flex items-center gap-2 text-gray-500">
-          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          Loading match review for {company}...
-        </div>
+      <div className="flex items-center gap-2 text-gray-500">
+        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        Loading match review for {company}...
       </div>
     );
   }
 
   if (!reviewData) {
     return (
-      <div className="max-w-screen-xl mx-auto p-4">
-        <p className="text-gray-500">No match review data available for {company}.</p>
-      </div>
+      <p className="text-gray-500">No match review data available for {company}.</p>
     );
   }
 
   return (
-    <div className="max-w-screen-xl mx-auto p-4">
+    <>
       {/* Header */}
       <div className="flex items-center gap-6 mb-4 text-sm text-gray-600">
         <h2 className="text-xl font-semibold text-gray-900">
@@ -162,6 +178,6 @@ export default function MatchReviewPage() {
         onSelect={handleEntitySelected}
         onClose={() => setPickerItemId(null)}
       />
-    </div>
+    </>
   );
 }

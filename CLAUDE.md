@@ -16,7 +16,7 @@ Org chart viewer rebuilt as **Next.js 15 + React + Tailwind**. Extracts org stru
 
 ```
 app/
-├── layout.tsx                      # Header + global layout
+├── layout.tsx                      # Header + global layout (content width: max-w-[1600px])
 ├── page.tsx                        # Redirect / → /manual/astrazeneca
 ├── globals.css                     # Tailwind import
 ├── manual/[company]/page.tsx       # Manual Map (tree + table toggle)
@@ -39,7 +39,7 @@ lib/
 ├── use-kv-state.ts                 # Single hook: fetch, sync poll, mutations
 
 components/
-├── Header.tsx                      # Company select + mode tabs (usePathname)
+├── Header.tsx                      # Company select + mode tabs + refresh button
                                     # (Phase 3 — remaining UI components)
 ```
 
