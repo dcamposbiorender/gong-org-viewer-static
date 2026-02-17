@@ -14,8 +14,8 @@ interface Props {
   merges: Record<string, EntityMerge>;
   onClose: () => void;
   onCreate: (parentId: string, name: string) => void;
-  onDelete: (entityId: string) => void;
-  onMerge: (canonicalId: string, absorbedId: string) => void;
+  onDelete: (entityId: string) => void | Promise<void>;
+  onMerge: (canonicalId: string, absorbedId: string) => void | Promise<void>;
 }
 
 export default function ManageEntitiesModal({
@@ -29,6 +29,7 @@ export default function ManageEntitiesModal({
   onMerge,
 }: Props) {
   const [tab, setTab] = useState<Tab>("create");
+  const [saving, setSaving] = useState(false);
 
   // Create tab state
   const [createParentSearch, setCreateParentSearch] = useState("");
@@ -83,10 +84,15 @@ export default function ManageEntitiesModal({
     ? entities.filter((e) => e.name.toLowerCase().includes(deleteSearch.toLowerCase()))
     : entities;
 
-  const handleDelete = () => {
-    if (!selectedDelete) return;
-    onDelete(selectedDelete.id);
-    onClose();
+  const handleDelete = async () => {
+    if (!selectedDelete || saving) return;
+    setSaving(true);
+    try {
+      await onDelete(selectedDelete.id);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Merge tab helpers
@@ -118,11 +124,15 @@ export default function ManageEntitiesModal({
 
   const canMerge = entityA && entityB && !mergeError;
 
-  const handleMerge = () => {
-    if (!entityA || !entityB || mergeError) return;
-    // A is absorbed into B (B is canonical)
-    onMerge(entityB.id, entityA.id);
-    onClose();
+  const handleMerge = async () => {
+    if (!entityA || !entityB || mergeError || saving) return;
+    setSaving(true);
+    try {
+      await onMerge(entityB.id, entityA.id);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   };
 
   const tabClass = (t: Tab) =>
@@ -261,9 +271,10 @@ export default function ManageEntitiesModal({
                   <div className="flex gap-2 mt-2">
                     <button
                       onClick={handleDelete}
-                      className="px-4 py-1.5 bg-red-600 text-white rounded text-sm"
+                      disabled={saving}
+                      className="px-4 py-1.5 bg-red-600 text-white rounded text-sm disabled:opacity-50"
                     >
-                      Confirm Delete
+                      {saving ? "Deleting..." : "Confirm Delete"}
                     </button>
                     <button
                       onClick={() => setSelectedDelete(null)}
@@ -365,10 +376,10 @@ export default function ManageEntitiesModal({
 
               <button
                 onClick={handleMerge}
-                disabled={!canMerge}
+                disabled={!canMerge || saving}
                 className="w-full px-4 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Confirm Merge
+                {saving ? "Merging..." : "Confirm Merge"}
               </button>
             </div>
           )}

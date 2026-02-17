@@ -87,6 +87,7 @@ export default function TreeView({
 
   return (
     <div className="tree-container overflow-x-auto">
+      <div className="min-w-max inline-flex justify-center w-full">
       <TreeNode
         node={workingTree}
         level={0}
@@ -106,6 +107,7 @@ export default function TreeView({
         isDraggingRef={isDraggingRef}
         workingTree={workingTree}
       />
+      </div>
     </div>
   );
 }

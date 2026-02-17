@@ -162,6 +162,35 @@ describe("buildWorkingTree", () => {
     expect(divA.children.map((c) => c.id)).toContain("new1");
   });
 
+  it("applies leader field edits on node with no original leader", () => {
+    // Division B has no leader property in makeTree()
+    const edits: Record<string, FieldEdit> = {
+      b: {
+        leaderName: { original: "", edited: "Bob" },
+        leaderTitle: { original: "", edited: "Director" },
+      },
+    };
+    const tree = buildWorkingTree(makeTree(), {}, null, {}, edits);
+    const divB = tree.children.find((c) => c.id === "b")!;
+    expect(divB.displayLeaderName).toBe("Bob");
+    expect(divB.displayLeaderTitle).toBe("Director");
+    // Original leader should still be undefined
+    expect(divB.leader).toBeUndefined();
+  });
+
+  it("deletes a manually-added entity", () => {
+    const modifications: CompanyModifications = {
+      added: [
+        { id: "manual-1", name: "Test Entity", parentId: "b", addedAt: "2026-01-01" },
+      ],
+      deleted: [{ id: "manual-1", deletedAt: "2026-01-02" }],
+    };
+    const tree = buildWorkingTree(makeTree(), {}, modifications, {}, {});
+    const divB = tree.children.find((c) => c.id === "b")!;
+    // manual-1 should NOT appear — it's in both added and deleted
+    expect(divB.children.map((c) => c.id)).not.toContain("manual-1");
+  });
+
   it("handles empty overlays", () => {
     const tree = buildWorkingTree(makeTree(), {}, null, {}, {});
     expect(tree.children).toHaveLength(2);

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { OrgState, StateType } from "./types";
 import { EMPTY_STATE } from "./types";
+import { useToast } from "@/components/Toast";
 
 const STATE_TYPES: StateType[] = [
   "corrections",
@@ -142,15 +143,8 @@ async function deleteOrgState(
   }
 }
 
-function showToast(message: string, level: "warn" | "info" = "warn") {
-  if (level === "info") {
-    console.info(`[Toast] ${message}`);
-  } else {
-    console.warn(`[Toast] ${message}`);
-  }
-}
-
 export function useKVState(company: string) {
+  const { showToast } = useToast();
   const [state, setState] = useState<OrgState>(EMPTY_STATE);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -178,14 +172,14 @@ export function useKVState(company: string) {
       if (document.hidden || isDraggingRef.current) return;
       const version = await fetchSyncVersion(company);
       if (version && version !== lastVersionRef.current && lastVersionRef.current !== "") {
-        showToast("Data updated by another user — refreshing...", "info");
+        showToast("Data updated by another user — refreshing...");
         const data = await fetchAllOrgState(company);
         setState(data);
       }
       lastVersionRef.current = version;
     }, 10_000);
     return () => clearInterval(interval);
-  }, [company]);
+  }, [company, showToast]);
 
   // Apply-and-save mutation with optimistic updates for all state types
   const save = useCallback(
@@ -222,14 +216,14 @@ export function useKVState(company: string) {
 
       const ok = await postOrgState(company, type, body);
       if (!ok) {
-        showToast("Save failed — change applied locally but not synced");
+        showToast("Save failed — change applied locally but not synced", "error");
       } else {
         // Eagerly refetch to confirm server state
         const confirmed = await fetchAllOrgState(company);
         setState(confirmed);
       }
     },
-    [company]
+    [company, showToast]
   );
 
   // Delete mutation
@@ -237,14 +231,14 @@ export function useKVState(company: string) {
     async (type: StateType, body: Record<string, unknown>) => {
       const ok = await deleteOrgState(company, type, body);
       if (!ok) {
-        showToast("Delete failed — not synced");
+        showToast("Delete failed — not synced", "error");
         return;
       }
       // Refresh state from server after delete
       const data = await fetchAllOrgState(company);
       setState(data);
     },
-    [company]
+    [company, showToast]
   );
 
   // Manual refresh — force full state reload from server

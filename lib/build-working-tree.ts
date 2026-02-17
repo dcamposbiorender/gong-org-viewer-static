@@ -68,15 +68,18 @@ function applyModifications(
   tree: WorkingTreeNode,
   modifications: CompanyModifications
 ): void {
-  // Apply deletions first
   const deleted = Array.isArray(modifications.deleted) ? modifications.deleted : [];
+  const deletedIds = new Set(deleted.map((d) => d.id));
+
+  // Remove from base tree
   for (const deletion of deleted) {
     removeNode(tree, deletion.id);
   }
 
-  // Then additions
+  // Add new entities — skip any that were also deleted
   const added = Array.isArray(modifications.added) ? modifications.added : [];
   for (const addition of added) {
+    if (deletedIds.has(addition.id)) continue;
     const parent = findWorkingNode(tree, addition.parentId);
     if (parent) {
       parent.children.push({
@@ -111,10 +114,10 @@ function applyFieldEdits(
     if (edit.name?.edited) {
       node.displayName = edit.name.edited;
     }
-    if (edit.leaderName?.edited && node.leader) {
+    if (edit.leaderName?.edited) {
       node.displayLeaderName = edit.leaderName.edited;
     }
-    if (edit.leaderTitle?.edited && node.leader) {
+    if (edit.leaderTitle?.edited) {
       node.displayLeaderTitle = edit.leaderTitle.edited;
     }
   }
