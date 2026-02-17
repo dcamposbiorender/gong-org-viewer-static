@@ -1,0 +1,68 @@
+import { kv } from './_lib/kv';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { validateAccount } from './_lib/validation';
+import { setCorsHeaders } from './_lib/cors';
+
+interface AutosaveState {
+  overrides: object;
+  sizeOverrides: object;
+  matchReviewState: object;
+  conflictResolutions: object;
+  fieldEdits: object;
+  entityMerges: object;
+  manualMapOverrides: object;
+  mode: string;
+  savedAt: string;
+  user?: string;
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setCorsHeaders(req, res);
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const validation = validateAccount(req.query.account as string | undefined);
+  if (!validation.isValid) {
+    return res.status(400).json({ error: validation.error });
+  }
+  const account = validation.account!;
+
+  const kvKey = `autosave:${account}`;
+
+  try {
+    if (req.method === 'GET') {
+      const data = await kv.get<AutosaveState>(kvKey);
+      if (!data) {
+        return res.status(404).json({ error: 'No autosave found' });
+      }
+      return res.json(data);
+    }
+
+    if (req.method === 'POST') {
+      const { state, user } = req.body as {
+        state: Omit<AutosaveState, 'savedAt' | 'user'>;
+        user?: string;
+      };
+
+      if (!state) {
+        return res.status(400).json({ error: 'state required' });
+      }
+
+      const autosave: AutosaveState = {
+        ...state,
+        savedAt: new Date().toISOString(),
+        user: user || 'anonymous'
+      };
+
+      await kv.set(kvKey, autosave);
+      return res.json({ success: true, savedAt: autosave.savedAt });
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' });
+  } catch (error) {
+    console.error('KV error:', error);
+    return res.status(500).json({ error: 'Database error' });
+  }
+}

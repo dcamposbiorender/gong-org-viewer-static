@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'scripts'))
 
-INDEX_HTML_PATH = PROJECT_ROOT / 'public' / 'index.html'
+from conftest import get_index_html_path
 
 
 class TestNormalizeEntityName:
@@ -192,10 +192,11 @@ class TestNormalizationParity:
             assert result == expected, \
                 f"Python normalize('{input_name}') = '{result}', expected '{expected}'"
 
-        # Verify the JS function uses the same regex pattern
-        html = INDEX_HTML_PATH.read_text(encoding='utf-8')
-        js_match = re.search(r"function normalizeEntityName\([^)]*\)\s*\{([\s\S]*?)\n\}", html)
-        assert js_match, "JS normalizeEntityName not found"
+        # Verify the TS function uses the same regex pattern
+        # After Phase 1b migration, code lives in src/*.ts
+        ts_utils = (PROJECT_ROOT / 'src' / 'utils.ts').read_text(encoding='utf-8')
+        js_match = re.search(r"function normalizeEntityName\([^)]*\)[^{]*\{([\s\S]*?)\n\}", ts_utils)
+        assert js_match, "TS normalizeEntityName not found in src/utils.ts"
         js_body = js_match.group(1)
 
         # Check that both use the same suffix list anchored to end of string

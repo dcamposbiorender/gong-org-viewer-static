@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<!-- Generated: 2026-01-07 12:59:59 -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Org Intelligence - Generated</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="header-row">
+    <div class="header-left">
+      <div class="master-switch">
+        <button id="manualModeBtn" class="active">Manual Map</button>
+        <button id="matchReviewBtn">Match Review</button>
+      </div>
+      <select class="company-select" id="companySelect">
+        <option value="abbvie">AbbVie ▾</option>
+        <option value="astrazeneca">AstraZeneca ▾</option>
+        <option value="gsk">GSK ▾</option>
+        <option value="lilly">Eli Lilly ▾</option>
+        <option value="novartis">Novartis ▾</option>
+        <option value="regeneron">Regeneron ▾</option>
+        <option value="roche">Roche ▾</option>
+      </select>
+      <div class="stats" id="stats"></div>
+    </div>
+    
+    <div class="timeline-container">
+      <span class="timeline-label">Time Range</span>
+      <div class="timeline-slider-wrap">
+        <div class="timeline-range">
+          <div class="timeline-track"></div>
+          <div class="timeline-fill" id="timelineFill"></div>
+          <input type="range" class="timeline-slider" id="startSlider" min="0" max="100" value="0">
+          <input type="range" class="timeline-slider" id="endSlider" min="0" max="100" value="100">
+        </div>
+        <div class="timeline-dates">
+          <span id="startDate">Jan 2024</span>
+          <span id="endDate">Dec 2025</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="header-controls">
+      <div class="view-toggle">
+        <button id="treeViewBtn" class="active">Tree</button>
+        <button id="tableViewBtn">Table</button>
+      </div>
+      <button class="reset-btn" id="resetAllBtn">Reset Overrides</button>
+      <button class="reset-btn" id="manageEntitiesBtn" title="Create or delete entities in Manual Map">
+        Manage Entities
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="change-summary" id="changeSummary">
+  <div class="change-stat" data-type="conflicts">
+    <div class="change-dot conflict"></div>
+    <span><strong id="conflictCount">0</strong> verification conflicts</span>
+  </div>
+  <div class="change-stat" data-type="reorg">
+    <div class="change-dot reorg"></div>
+    <span><strong id="reorgCount">0</strong> potential reorgs</span>
+  </div>
+  <div class="change-stat" data-type="leadership">
+    <div class="change-dot leadership"></div>
+    <span><strong id="leadershipCount">0</strong> leadership changes</span>
+  </div>
+  <div class="change-stat" data-type="size">
+    <div class="change-dot size"></div>
+    <span><strong id="sizeCount">0</strong> size changes</span>
+  </div>
+</div>
+
+<!-- Changes Modal -->
+<div class="changes-modal" id="changesModal">
+  <div class="changes-modal-header">
+    <h3 id="changesModalTitle">Changes</h3>
+    <button class="changes-modal-close" id="changesModalClose">&times;</button>
+  </div>
+  <div class="changes-modal-content" id="changesModalContent">
+    <div class="changes-modal-empty">No changes detected</div>
+  </div>
+</div>
+
+<!-- Conflict Resolution Modal -->
+<div class="resolve-modal" id="resolveModal">
+  <div class="resolve-modal-content">
+    <div class="resolve-modal-header">
+      <h3 id="resolveModalTitle">Resolve Conflict</h3>
+      <button class="changes-modal-close" id="resolveModalClose">&times;</button>
+    </div>
+    <div class="resolve-modal-body" id="resolveModalBody">
+      <!-- Options populated by JS -->
+    </div>
+    <div class="resolve-modal-footer">
+      <button class="resolve-btn resolve-btn-cancel" id="resolveCancel">Cancel</button>
+      <button class="resolve-btn resolve-btn-save" id="resolveSave" disabled>Save Resolution</button>
+    </div>
+  </div>
+</div>
+
+<!-- Duplicates Modal -->
+<!-- Entity Picker Modal -->
+<div class="resolve-modal" id="entityPickerModal" style="display: none;">
+  <div class="resolve-modal-content" style="max-width: 500px; max-height: 80vh;">
+    <div class="resolve-modal-header">
+      <h3>Pick Entity for Match</h3>
+      <button class="changes-modal-close" id="closeEntityPickerBtn">&times;</button>
+    </div>
+    <div class="resolve-modal-body" style="padding: 16px;">
+      <div style="margin-bottom: 12px;">
+        <input type="text" id="entityPickerSearch" placeholder="Search entities..."
+               style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
+               oninput="filterEntityPickerList()">
+      </div>
+      <div id="entityPickerList" style="max-height: 400px; overflow-y: auto;">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+    <div class="resolve-modal-footer">
+      <button class="resolve-btn resolve-btn-cancel" id="cancelEntityPickerBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Entities Modal -->
+<div class="resolve-modal" id="manageEntitiesModal" style="display: none;">
+  <div class="resolve-modal-content" style="max-width: 550px; max-height: 85vh;">
+    <div class="resolve-modal-header">
+      <h3>Manage Entities</h3>
+      <button class="changes-modal-close" id="closeManageEntitiesBtn">&times;</button>
+    </div>
+    <div class="resolve-modal-body" style="padding: 16px;">
+      <!-- Tab buttons -->
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #e0e0e0; padding-bottom: 12px;">
+        <button id="createEntityTab" class="reset-btn" style="flex: 1;">Create Entity</button>
+        <button id="deleteEntityTab" class="reset-btn" style="flex: 1; opacity: 0.6;">Delete Entity</button>
+        <button id="mergeEntityTab" class="reset-btn" style="flex: 1; opacity: 0.6;">Merge Entities</button>
+      </div>
+
+      <!-- Create Entity Form -->
+      <div id="createEntityPane">
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Create a new entity and add it to the Manual Map tree.</p>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Parent Entity *</label>
+          <input type="text" id="createEntityParentSearch" placeholder="Search for parent entity..."
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 4px;"
+                 id="createEntityParentSearchInput">
+          <div id="createEntityParentList" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; display: none;">
+            <!-- Populated by JS -->
+          </div>
+          <div id="createEntitySelectedParent" style="padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 13px; display: none;">
+            <!-- Shows selected parent -->
+          </div>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Entity Name *</label>
+          <input type="text" id="createEntityName" placeholder="Enter entity name"
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Leader Name</label>
+          <input type="text" id="createEntityLeaderName" placeholder="Enter leader name (optional)"
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Leader Title</label>
+          <input type="text" id="createEntityLeaderTitle" placeholder="Enter leader title (optional)"
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+        </div>
+
+        <button class="resolve-btn resolve-btn-confirm" style="width: 100%;" id="createEntityBtn">Create Entity</button>
+      </div>
+
+      <!-- Delete Entity Form -->
+      <div id="deleteEntityPane" style="display: none;">
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Select an entity to delete from the Manual Map tree. This cannot be undone.</p>
+
+        <div style="margin-bottom: 12px;">
+          <input type="text" id="deleteEntitySearch" placeholder="Search for entity to delete..."
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
+                 id="deleteEntitySearchInput">
+        </div>
+        <div id="deleteEntityList" style="max-height: 300px; overflow-y: auto;">
+          <!-- Populated by JS -->
+        </div>
+
+        <div id="deleteEntityConfirm" style="display: none; margin-top: 16px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+          <p style="margin: 0 0 12px 0; font-size: 13px; color: #856404;">
+            Are you sure you want to delete <strong id="deleteEntityName"></strong>?
+            <span id="deleteEntityChildrenWarning" style="display: none; color: #c9302c;"><br>This will also delete all children!</span>
+          </p>
+          <div style="display: flex; gap: 8px;">
+            <button class="resolve-btn resolve-btn-cancel" id="cancelDeleteBtn">Cancel</button>
+            <button class="resolve-btn" style="background: #c9302c; color: white;" id="confirmDeleteBtn">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Merge Entities Form -->
+      <div id="mergeEntityPane" style="display: none;">
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Select two entities to merge. Entity A will be absorbed into Entity B (canonical).</p>
+
+        <!-- Entity A (to be absorbed) -->
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Entity A (will be absorbed) *</label>
+          <input type="text" id="mergeEntityASearch" placeholder="Search for entity to absorb..."
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 4px;"
+                 id="mergeEntityASearchInput">
+          <div id="mergeEntityAList" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; display: none;"></div>
+          <div id="mergeEntityASelected" style="padding: 8px; background: #fff3cd; border-radius: 4px; font-size: 13px; display: none;"></div>
+        </div>
+
+        <!-- Entity B (canonical) -->
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 11px; color: #666; display: block; margin-bottom: 4px;">Entity B (canonical - keeps name) *</label>
+          <input type="text" id="mergeEntityBSearch" placeholder="Search for canonical entity..."
+                 style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 4px;"
+                 id="mergeEntityBSearchInput">
+          <div id="mergeEntityBList" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; display: none;"></div>
+          <div id="mergeEntityBSelected" style="padding: 8px; background: #d4edda; border-radius: 4px; font-size: 13px; display: none;"></div>
+        </div>
+
+        <!-- Preview panel -->
+        <div id="mergePreviewPanel" style="display: none; margin-bottom: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 4px;">
+          <div style="font-weight: 600; margin-bottom: 8px;">Merge Preview</div>
+          <div id="mergePreviewContent"></div>
+        </div>
+
+        <!-- Validation error -->
+        <div id="mergeValidationError" style="display: none; margin-bottom: 12px; padding: 8px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24; font-size: 13px;"></div>
+
+        <button id="mergeConfirmBtn" class="resolve-btn resolve-btn-confirm" style="width: 100%; opacity: 0.5;" disabled>Merge Entities</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Graduate Modal -->
+<!-- Snippet Context Modal -->
+<div class="resolve-modal" id="snippetContextModal">
+  <div class="resolve-modal-content" style="max-width: 700px;">
+    <div class="resolve-modal-header">
+      <div>
+        <h3 id="snippetContextTitle" style="margin: 0;">Call Context</h3>
+        <div id="snippetContextMeta" style="font-size: 12px; color: #666; margin-top: 4px;"></div>
+        <a id="snippetContextGongLink" href="#" target="_blank" style="font-size: 11px; color: #2563eb; display: none;">↗ Open in Gong</a>
+      </div>
+      <button class="changes-modal-close" id="closeSnippetContextBtn">&times;</button>
+    </div>
+    <div class="resolve-modal-body" id="snippetContextBody"
+      style="font-family: 'Georgia', serif; line-height: 1.7; font-size: 14px; max-height: 60vh; overflow-y: auto;">
+    </div>
+  </div>
+</div>
+
+<main class="main">
+  <div class="tree-container" id="treeContainer">
+    <div class="tree" id="tree"></div>
+  </div>
+
+  <!-- Side-by-side comparison view for Manual Map mode -->
+  <div class="side-by-side-container" id="sideBySideContainer">
+    <div class="side-by-side-panel left" id="manualMapPanel">
+      <div class="side-by-side-panel-header">Manual Map</div>
+      <div id="manualMapTree"></div>
+    </div>
+    <div class="side-by-side-panel right" id="extractedMatchPanel">
+      <div class="side-by-side-panel-header">Extracted Matches</div>
+      <div id="extractedMatches"></div>
+    </div>
+  </div>
+
+  <!-- Match Review view -->
+  <div class="match-review-container" id="matchReviewContainer">
+    <div class="match-review-header">
+      <div class="match-review-stats" id="matchReviewStats">
+        <div><span class="stat-value" id="mrTotalCount">0</span> unmatched entities</div>
+        <div><span class="stat-value" id="mrWithSuggestions">0</span> with suggestions</div>
+        <div><span class="stat-value" id="mrApprovedCount">0</span> approved</div>
+        <div><span class="stat-value" id="mrRejectedCount">0</span> rejected</div>
+      </div>
+      <div class="match-review-filters">
+        <input type="text" id="mrSearchFilter" placeholder="Search entities...">
+        <select id="mrStatusFilter">
+          <option value="">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="manual">Manual Match</option>
+        </select>
+        <select id="mrConfidenceFilter">
+          <option value="">All Confidence</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="none">No Suggestion</option>
+        </select>
+      </div>
+    </div>
+    <div class="match-review-table-wrap">
+      <table class="match-review-table">
+        <thead>
+          <tr>
+            <th style="width: 25%">Snippet</th>
+            <th style="width: 12%">Person</th>
+            <th style="width: 15%">Gong Entity</th>
+            <th style="width: 18%">Suggested Match</th>
+            <th style="width: 15%">Reasoning</th>
+            <th style="width: 15%">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="matchReviewBody">
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="table-container" id="tableContainer">
+    <div class="table-filters">
+      <div class="table-filter">
+        <label>Search</label>
+        <input type="text" id="tableSearch" placeholder="Filter...">
+      </div>
+      <div class="table-filter">
+        <label>Confidence</label>
+        <select id="confidenceFilter">
+          <option value="">All</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+      <div class="table-filter">
+        <label>Type</label>
+        <select id="typeFilter">
+          <option value="">All</option>
+          <option value="therapeutic_area">Therapeutic Area</option>
+          <option value="department">Department</option>
+          <option value="team">Team</option>
+          <option value="sub_team">Sub-team</option>
+        </select>
+      </div>
+    </div>
+    <table class="snippets-table">
+      <thead>
+        <tr>
+          <th class="sortable" data-sort="entity">Entity</th>
+          <th class="sortable" data-sort="type">Type</th>
+          <th>Quote</th>
+          <th class="sortable" data-sort="date">Date</th>
+          <th>AE / BD</th>
+          <th class="sortable" data-sort="confidence">Confidence</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</main>
+
+<div class="evidence-panel" id="evidencePanel">
+  <div class="evidence-header" id="evidenceHeader">
+    <span class="evidence-title">
+      <span id="evidenceTitleText">Source Evidence</span>
+    </span>
+    <span class="evidence-toggle" id="evidenceToggle">▲ expand</span>
+  </div>
+  <div class="evidence-content" id="evidenceContent">
+    <div class="evidence-empty" id="evidenceEmpty">Select an entity to view source evidence</div>
+  </div>
+</div>
+
+
+<!-- Data (pipeline-generated, loaded at runtime by init.ts via globals) -->
+<script src="/js/data.js"></script>
+<script src="/js/manual-data.js"></script>
+<script src="/js/match-review-data.js"></script>
+
+<!-- App (TypeScript ES modules, bundled by Vite) -->
+<script type="module" src="/src/init.ts"></script>
+
+</body>
+</html>
